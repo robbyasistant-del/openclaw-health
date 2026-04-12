@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  password    String   // hashed
+  role        String   @default("user") // admin, doctor, user
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  healthChecks HealthCheck[]
+  workspaces   Workspace[]
+  configs      Config[]
+  
+  @@map("users")
+}
+
+model HealthCheck {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // checkup, emergency, routine
+  status      String   @default("pending") // pending, completed, failed
+  result      String?  // JSON string with results
+  score       Int?     // 0-100 health score
+  checkedAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("health_checks")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("workspaces")
+}
+
+model Config {
+  id          String   @id @default(cuid())
+  userId      String
+  key         String
+  value       String
+  category    String   @default("general") // general, security, notifications
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@unique([userId, key])
+  @@map("configs")
+}
+
+model Doctor {
+  id          String   @id @default(cuid())
+  name        String
+  specialty   String
+  email       String   @unique
+  phone       String?
+  availability String?  // JSON schedule
+  createdAt   DateTime @default(now())
+  
+  @@map("doctors")
+}
+
+model SecurityLog {
+  id          String   @id @default(cuid())
+  action      String   // login, logout, failed_login, config_change
+  userId      String?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  @@map("security_logs")
+}
