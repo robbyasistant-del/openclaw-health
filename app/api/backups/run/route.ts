@@ -216,9 +216,8 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
     }
     if (typeof parsed?.text === "string") return parsed.text.trim();
     return stdout.trim();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return `Agent confirmation unavailable: ${message}`;
+  } catch {
+    return "Backup committed and pushed. Agent confirmation skipped (LLM provider unavailable).";
   }
 }
 
