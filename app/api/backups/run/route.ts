@@ -225,15 +225,23 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
   }
 }
 
-async function processBackupRun(runId: string): Promise<void> {
+async function setRunMessage(runId: string, message: string): Promise<void> {
   try {
-    // 1. Copy files exhaustively
+    await prisma.backupRun.update({ where: { id: runId }, data: { message } });
+  } catch {
+    // ignore write errors during progress updates
+  }
+}
+
+async function processBackupRun(runId: string): Promise<{ status: string; committedAt?: string; agentReply?: string; message?: string; error?: string }> {
+  try {
+    await setRunMessage(runId, "Copiando archivos...");
     await copyFilesToBackupRepo();
 
-    // 2. Sanitize secrets recursively
+    await setRunMessage(runId, "Sanitizando secretos...");
     await sanitizeSecretsInDir(BACKUP_REPO_PATH);
 
-    // 3. Git add / commit / push
+    await setRunMessage(runId, "Preparando commit...");
     const now = new Date().toISOString();
     const defaultMessage = `Backup - ${now}`;
 
@@ -253,13 +261,14 @@ async function processBackupRun(runId: string): Promise<void> {
           message: "No hay cambios nuevos para respaldar.",
         },
       });
-      return;
+      return { status: "no_changes", message: "No hay cambios nuevos para respaldar." };
     }
 
+    await setRunMessage(runId, "Haciendo commit y push...");
     execSync(`git -C "${BACKUP_REPO_PATH}" commit -m "${defaultMessage}"`, { windowsHide: true });
     execSync(`git -C "${BACKUP_REPO_PATH}" push origin master`, { windowsHide: true });
 
-    // 4. Read prompt and call agent
+    await setRunMessage(runId, "Esperando confirmación del agente (puede tardar)...");
     const promptsMd = await fs.readFile(PROMPTS_PATH, "utf8");
     const prompt = extractBackupPrompt(promptsMd);
     const agentReply = await askAgentConfirmation(prompt);
@@ -273,6 +282,8 @@ async function processBackupRun(runId: string): Promise<void> {
         agentReply,
       },
     });
+
+    return { status: "success", committedAt: now, agentReply };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.backupRun.update({
@@ -283,6 +294,7 @@ async function processBackupRun(runId: string): Promise<void> {
         error: message,
       },
     });
+    return { status: "failed", error: message };
   }
 }
 
@@ -291,13 +303,20 @@ export async function POST() {
     data: { status: "started" },
   });
 
-  // run backup logic in the background without blocking the response
-  void processBackupRun(run.id);
+  const result = await processBackupRun(run.id);
+
+  if (result.status === "no_changes") {
+    return NextResponse.json({ success: true, noChanges: true, message: result.message });
+  }
+
+  if (result.status === "failed") {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 });
+  }
 
   return NextResponse.json({
     success: true,
     runId: run.id,
-    status: "started",
-    message: "Backup iniciado en segundo plano.",
+    committedAt: result.committedAt,
+    agentReply: result.agentReply,
   });
 }
