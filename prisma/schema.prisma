@@ -95,3 +95,16 @@ model BackupConfig {
   
   @@map("backup_configs")
 }
+
+model BackupRun {
+  id          String   @id @default(cuid())
+  status      String   // started, success, no_changes, failed
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  committedAt DateTime?
+  message     String?
+  agentReply  String?
+  error       String?
+
+  @@map("backup_runs")
+}

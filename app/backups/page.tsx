@@ -21,9 +21,21 @@ interface Commit {
   message: string;
 }
 
+interface BackupRun {
+  id: string;
+  status: string;
+  startedAt: string;
+  finishedAt?: string | null;
+  committedAt?: string | null;
+  message?: string | null;
+  agentReply?: string | null;
+  error?: string | null;
+}
+
 export default function BackupsPage() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/robbyasistant-del/openclaw-backups");
   const [commits, setCommits] = useState<Commit[]>([]);
+  const [latestRun, setLatestRun] = useState<BackupRun | null>(null);
   const [loadingCommits, setLoadingCommits] = useState(true);
   const [runningBackup, setRunningBackup] = useState(false);
   const [savingUrl, setSavingUrl] = useState(false);
@@ -34,6 +46,7 @@ export default function BackupsPage() {
   useEffect(() => {
     fetchConfig();
     fetchCommits();
+    fetchLatestRun();
   }, []);
 
   const fetchConfig = async () => {
@@ -74,6 +87,16 @@ export default function BackupsPage() {
     }
   };
 
+  const fetchLatestRun = async () => {
+    try {
+      const res = await fetch("/api/backups/status");
+      const data = await res.json();
+      setLatestRun(data.latest || null);
+    } catch (err) {
+      console.error("[Backups] Error fetching latest run:", err);
+    }
+  };
+
   const runBackup = async () => {
     try {
       setRunningBackup(true);
@@ -82,9 +105,11 @@ export default function BackupsPage() {
       const data = await res.json();
       setRunResult(data);
       await fetchCommits();
+      await fetchLatestRun();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setRunResult({ success: false, error: message });
+      await fetchLatestRun();
     } finally {
       setRunningBackup(false);
     }
@@ -114,11 +139,27 @@ export default function BackupsPage() {
     }
   };
 
-  const formatDate = (iso: string) => {
+  const formatDate = (iso?: string | null) => {
+    if (!iso) return "N/A";
     try {
       return new Date(iso).toLocaleString("es-ES");
     } catch {
       return iso;
+    }
+  };
+
+  const runStatusLabel = (status?: string) => {
+    switch (status) {
+      case "success":
+        return "Completado";
+      case "no_changes":
+        return "Sin cambios";
+      case "failed":
+        return "Fallido";
+      case "started":
+        return "En progreso";
+      default:
+        return status || "Desconocido";
     }
   };
 
@@ -180,6 +221,45 @@ export default function BackupsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {latestRun && (
+        <Card className={latestRun.status === "started" ? "border-amber-500/30" : undefined}>
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Clock3 className="h-4 w-4 text-zinc-400" />
+              Último intento de backup
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span
+                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                  latestRun.status === "success"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : latestRun.status === "no_changes"
+                    ? "bg-zinc-500/15 text-zinc-300"
+                    : latestRun.status === "failed"
+                    ? "bg-red-500/15 text-red-300"
+                    : "bg-amber-500/15 text-amber-300"
+                }`}
+              >
+                {runStatusLabel(latestRun.status)}
+              </span>
+              <span className="text-sm text-zinc-400">
+                {latestRun.status === "started"
+                  ? `Iniciado: ${formatDate(latestRun.startedAt)}`
+                  : `Finalizado: ${formatDate(latestRun.finishedAt)}`}
+              </span>
+            </div>
+            {latestRun.error && (
+              <p className="text-sm text-red-300">{latestRun.error}</p>
+            )}
+            {latestRun.agentReply && (
+              <p className="text-sm text-emerald-200">{latestRun.agentReply}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

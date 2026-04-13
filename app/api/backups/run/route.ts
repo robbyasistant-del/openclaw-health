@@ -3,8 +3,12 @@ import { execSync, exec } from "child_process";
 import { promisify } from "util";
 import { promises as fs } from "fs";
 import path from "path";
+import { prisma } from "@/lib/db";
 
 const execAsync = promisify(exec);
+
+const GATEWAY_LLM_TIMEOUT_SECONDS = Number(process.env.OPENCLAW_GATEWAY_LLM_TIMEOUT_SECONDS || "600");
+const GATEWAY_LLM_TIMEOUT_MS = GATEWAY_LLM_TIMEOUT_SECONDS * 1000;
 
 const BACKUP_REPO_PATH = "C:\\Users\\robby\\.openclaw\\workspace\\openclaw-backups";
 const WORKSPACE_ROOT = "C:\\Users\\robby\\.openclaw\\workspace";
@@ -200,10 +204,10 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
   const escaped = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
   try {
     const { stdout } = await execAsync(
-      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout 10`,
+      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout ${GATEWAY_LLM_TIMEOUT_SECONDS}`,
       {
         cwd: BACKUP_REPO_PATH,
-        timeout: 15000,
+        timeout: GATEWAY_LLM_TIMEOUT_MS + 5000,
         windowsHide: true,
         maxBuffer: 1024 * 1024,
       }
@@ -222,6 +226,10 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
 }
 
 export async function POST() {
+  const run = await prisma.backupRun.create({
+    data: { status: "started" },
+  });
+
   try {
     // 1. Copy files exhaustively
     await copyFilesToBackupRepo();
@@ -241,6 +249,14 @@ export async function POST() {
     });
 
     if (!status.trim()) {
+      await prisma.backupRun.update({
+        where: { id: run.id },
+        data: {
+          status: "no_changes",
+          finishedAt: new Date(),
+          message: "No hay cambios nuevos para respaldar.",
+        },
+      });
       return NextResponse.json({
         success: true,
         noChanges: true,
@@ -256,6 +272,16 @@ export async function POST() {
     const prompt = extractBackupPrompt(promptsMd);
     const agentReply = await askAgentConfirmation(prompt);
 
+    await prisma.backupRun.update({
+      where: { id: run.id },
+      data: {
+        status: "success",
+        finishedAt: new Date(),
+        committedAt: now,
+        agentReply,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       committedAt: now,
@@ -263,6 +289,14 @@ export async function POST() {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    await prisma.backupRun.update({
+      where: { id: run.id },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        error: message,
+      },
+    });
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
