@@ -203,7 +203,7 @@ async function sanitizeSecretsInDir(dirPath: string): Promise<void> {
 async function askAgentConfirmation(prompt: string): Promise<string> {
   const escaped = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
   try {
-    const { stdout } = await execAsync(
+    const agentPromise = execAsync(
       `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout ${GATEWAY_LLM_TIMEOUT_SECONDS}`,
       {
         cwd: BACKUP_REPO_PATH,
@@ -212,6 +212,13 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
         maxBuffer: 1024 * 1024,
       }
     );
+
+    // hard safety cap: if execAsync itself hangs, force-fail after 30s
+    const safetyTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Agent call safety timeout")), 30000)
+    );
+
+    const { stdout } = await Promise.race([agentPromise, safetyTimeout]);
 
     const parsed = JSON.parse(stdout);
     const payloads = parsed?.payloads;
