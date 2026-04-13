@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
 
-const execAsync = promisify(exec);
 const PROJECT_ROOT = "C:\\Users\\robby\\.openclaw\\workspace\\Product_openclaw_health";
 const PROMPTS_PATH = path.join(PROJECT_ROOT, "prompts.md");
 
@@ -47,26 +44,6 @@ function safeJsonParse(raw: string): any | null {
   }
 }
 
-function extractAgentReplyText(stdout: string): string {
-  const parsed = safeJsonParse(stdout);
-  if (!parsed) return stdout;
-
-  // OpenClaw agent --json returns an envelope: { payloads: [...], meta: ... }
-  const payloads = parsed?.payloads;
-  if (Array.isArray(payloads) && payloads.length > 0) {
-    const first = payloads[0];
-    if (typeof first?.text === "string") return first.text;
-    if (typeof first === "string") return first;
-  }
-
-  // Fallbacks for other possible shapes
-  if (typeof parsed?.text === "string") return parsed.text;
-  if (typeof parsed?.response === "string") return parsed.response;
-  if (typeof parsed?.result === "string") return parsed.result;
-
-  return stdout;
-}
-
 function normalizeSummaries(parsed: any): Record<string, string> {
   const items = Array.isArray(parsed?.folders) ? parsed.folders : [];
   const result: Record<string, string> = {};
@@ -76,29 +53,6 @@ function normalizeSummaries(parsed: any): Record<string, string> {
     }
   }
   return result;
-}
-
-async function askGateway(prompt: string): Promise<Record<string, string> | null> {
-  const escaped = prompt.replace(/"/g, '\\"');
-  try {
-    const { stdout } = await execAsync(
-      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout 90`,
-      {
-        cwd: PROJECT_ROOT,
-        timeout: 100000,
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-      }
-    );
-
-    const replyText = extractAgentReplyText(stdout);
-    const parsedJson = safeJsonParse(replyText);
-    const summaries = normalizeSummaries(parsedJson);
-    return Object.keys(summaries).length ? summaries : null;
-  } catch (err) {
-    console.error("[askGateway] failed:", err);
-    return null;
-  }
 }
 
 async function askOpenAI(prompt: string): Promise<Record<string, string>> {
@@ -170,13 +124,8 @@ export async function POST(request: NextRequest) {
     const template = extractPromptTemplate(promptsMd);
     const prompt = buildPrompt(template, workspacePath, folders);
 
-    const gatewaySummaries = await askGateway(prompt);
-    if (gatewaySummaries) {
-      return NextResponse.json({ summaries: gatewaySummaries, source: "gateway-main" });
-    }
-
-    const fallbackSummaries = await askOpenAI(prompt);
-    return NextResponse.json({ summaries: fallbackSummaries, source: "openai-fallback" });
+    const summaries = await askOpenAI(prompt);
+    return NextResponse.json({ summaries, source: "openai" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
