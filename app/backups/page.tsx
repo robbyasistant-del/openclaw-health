@@ -42,6 +42,8 @@ export default function BackupsPage() {
   const [recoveringHash, setRecoveringHash] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<{ success?: boolean; error?: string; agentReply?: string; noChanges?: boolean; message?: string } | null>(null);
   const [recoverResult, setRecoverResult] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [currentRun, setCurrentRun] = useState<BackupRun | null>(null);
 
   useEffect(() => {
     fetchConfig();
@@ -101,19 +103,59 @@ export default function BackupsPage() {
     try {
       setRunningBackup(true);
       setRunResult(null);
+      setCurrentRun(null);
       const res = await fetch("/api/backups/run", { method: "POST" });
       const data = await res.json();
-      setRunResult(data);
-      await fetchCommits();
-      await fetchLatestRun();
+      if (data.runId) {
+        setCurrentRunId(data.runId);
+      } else {
+        setRunResult(data);
+        setRunningBackup(false);
+        await fetchLatestRun();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setRunResult({ success: false, error: message });
-      await fetchLatestRun();
-    } finally {
       setRunningBackup(false);
+      await fetchLatestRun();
     }
   };
+
+  useEffect(() => {
+    if (!currentRunId) return;
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/backups/status?runId=${currentRunId}`);
+        const data = await res.json();
+        const run = data.run as BackupRun | null;
+        if (cancelled) return;
+        setCurrentRun(run);
+        if (run && (run.status === "success" || run.status === "no_changes" || run.status === "failed")) {
+          clearInterval(interval);
+          setCurrentRunId(null);
+          setRunningBackup(false);
+          setRunResult({
+            success: run.status === "success" || run.status === "no_changes",
+            noChanges: run.status === "no_changes",
+            message: run.message || undefined,
+            agentReply: run.agentReply || undefined,
+            error: run.error || undefined,
+          });
+          await fetchCommits();
+          await fetchLatestRun();
+        }
+      } catch (err) {
+        console.error("[Backups] Error polling run:", err);
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentRunId]);
 
   const recover = async (commitHash: string) => {
     const confirmed = window.confirm(
@@ -310,6 +352,20 @@ export default function BackupsPage() {
               {runningBackup ? "Ejecutando backup..." : "Run Backup"}
             </button>
           </div>
+
+          {(currentRunId || currentRun) && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <p className="font-medium">Backup en progreso</p>
+              </div>
+              {currentRun && (
+                <p className="mt-1 text-amber-100/80">
+                  Estado: {runStatusLabel(currentRun.status)} · Iniciado: {formatDate(currentRun.startedAt)}
+                </p>
+              )}
+            </div>
+          )}
 
           {runResult && (
             <div

@@ -225,11 +225,7 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
   }
 }
 
-export async function POST() {
-  const run = await prisma.backupRun.create({
-    data: { status: "started" },
-  });
-
+async function processBackupRun(runId: string): Promise<void> {
   try {
     // 1. Copy files exhaustively
     await copyFilesToBackupRepo();
@@ -250,18 +246,14 @@ export async function POST() {
 
     if (!status.trim()) {
       await prisma.backupRun.update({
-        where: { id: run.id },
+        where: { id: runId },
         data: {
           status: "no_changes",
           finishedAt: new Date(),
           message: "No hay cambios nuevos para respaldar.",
         },
       });
-      return NextResponse.json({
-        success: true,
-        noChanges: true,
-        message: "No hay cambios nuevos para respaldar.",
-      });
+      return;
     }
 
     execSync(`git -C "${BACKUP_REPO_PATH}" commit -m "${defaultMessage}"`, { windowsHide: true });
@@ -273,7 +265,7 @@ export async function POST() {
     const agentReply = await askAgentConfirmation(prompt);
 
     await prisma.backupRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: {
         status: "success",
         finishedAt: new Date(),
@@ -281,22 +273,31 @@ export async function POST() {
         agentReply,
       },
     });
-
-    return NextResponse.json({
-      success: true,
-      committedAt: now,
-      agentReply,
-    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.backupRun.update({
-      where: { id: run.id },
+      where: { id: runId },
       data: {
         status: "failed",
         finishedAt: new Date(),
         error: message,
       },
     });
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+export async function POST() {
+  const run = await prisma.backupRun.create({
+    data: { status: "started" },
+  });
+
+  // run backup logic in the background without blocking the response
+  void processBackupRun(run.id);
+
+  return NextResponse.json({
+    success: true,
+    runId: run.id,
+    status: "started",
+    message: "Backup iniciado en segundo plano.",
+  });
 }
