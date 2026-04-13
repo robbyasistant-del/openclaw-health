@@ -124,6 +124,20 @@ export async function POST() {
     const defaultMessage = `Backup - ${now}`;
 
     execSync(`git -C "${BACKUP_REPO_PATH}" add -A`, { windowsHide: true });
+
+    const status = execSync(`git -C "${BACKUP_REPO_PATH}" status --porcelain`, {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+
+    if (!status.trim()) {
+      return NextResponse.json({
+        success: true,
+        noChanges: true,
+        message: "No hay cambios nuevos para respaldar.",
+      });
+    }
+
     execSync(`git -C "${BACKUP_REPO_PATH}" commit -m "${defaultMessage}"`, { windowsHide: true });
     execSync(`git -C "${BACKUP_REPO_PATH}" push origin master`, { windowsHide: true });
 

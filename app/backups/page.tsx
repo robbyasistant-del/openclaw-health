@@ -28,7 +28,7 @@ export default function BackupsPage() {
   const [runningBackup, setRunningBackup] = useState(false);
   const [savingUrl, setSavingUrl] = useState(false);
   const [recoveringHash, setRecoveringHash] = useState<string | null>(null);
-  const [runResult, setRunResult] = useState<{ success?: boolean; error?: string; agentReply?: string } | null>(null);
+  const [runResult, setRunResult] = useState<{ success?: boolean; error?: string; agentReply?: string; noChanges?: boolean; message?: string } | null>(null);
   const [recoverResult, setRecoverResult] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
 
   useEffect(() => {
@@ -235,14 +235,21 @@ export default function BackupsPage() {
             <div
               className={`rounded-lg border px-4 py-3 text-sm ${
                 runResult.success
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+                  ? runResult.noChanges
+                    ? "border-zinc-600/30 bg-zinc-800/50 text-zinc-300"
+                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
                   : "border-red-500/20 bg-red-500/10 text-red-200"
               }`}
             >
               <p className="font-medium">
-                {runResult.success ? "Backup completado" : "Error en backup"}
+                {runResult.success
+                  ? runResult.noChanges
+                    ? "Sin cambios"
+                    : "Backup completado"
+                  : "Error en backup"}
               </p>
               {runResult.error && <p className="mt-1">{runResult.error}</p>}
+              {runResult.message && <p className="mt-1">{runResult.message}</p>}
               {runResult.agentReply && (
                 <div className="mt-2">
                   <p className="text-xs font-medium uppercase tracking-wide text-emerald-300/80">Respuesta del agente</p>
