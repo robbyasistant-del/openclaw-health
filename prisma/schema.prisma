@@ -86,3 +86,12 @@ model SecurityLog {
   
   @@map("security_logs")
 }
+
+model BackupConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+  
+  @@map("backup_configs")
+}
