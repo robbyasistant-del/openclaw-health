@@ -21,9 +21,13 @@ Return strict JSON with this exact shape:
 {"folders":[{"name":"folder-name","summary":"one-line purpose"}]}
 
 Rules:
+- DO NOT ask clarifying questions.
+- DO NOT greet the user.
+- DO NOT explain what you are doing.
+- Your entire response must be ONLY the JSON object. No markdown, no prose, no code blocks.
 - Only include folders from the provided list.
 - Write one concise line per folder.
 - Infer purpose from the folder name and the workspace context.
 - If the purpose is uncertain, still provide the best cautious guess.
-- Do not include markdown or any text outside the JSON object.
+- Do not include any text outside the JSON object.
 ```

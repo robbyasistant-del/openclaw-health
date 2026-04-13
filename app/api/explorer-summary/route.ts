@@ -47,6 +47,26 @@ function safeJsonParse(raw: string): any | null {
   }
 }
 
+function extractAgentReplyText(stdout: string): string {
+  const parsed = safeJsonParse(stdout);
+  if (!parsed) return stdout;
+
+  // OpenClaw agent --json returns an envelope: { payloads: [...], meta: ... }
+  const payloads = parsed?.payloads;
+  if (Array.isArray(payloads) && payloads.length > 0) {
+    const first = payloads[0];
+    if (typeof first?.text === "string") return first.text;
+    if (typeof first === "string") return first;
+  }
+
+  // Fallbacks for other possible shapes
+  if (typeof parsed?.text === "string") return parsed.text;
+  if (typeof parsed?.response === "string") return parsed.response;
+  if (typeof parsed?.result === "string") return parsed.result;
+
+  return stdout;
+}
+
 function normalizeSummaries(parsed: any): Record<string, string> {
   const items = Array.isArray(parsed?.folders) ? parsed.folders : [];
   const result: Record<string, string> = {};
@@ -71,10 +91,12 @@ async function askGateway(prompt: string): Promise<Record<string, string> | null
       }
     );
 
-    const parsed = safeJsonParse(stdout);
-    const summaries = normalizeSummaries(parsed?.result ?? parsed?.data ?? parsed?.response ?? parsed);
+    const replyText = extractAgentReplyText(stdout);
+    const parsedJson = safeJsonParse(replyText);
+    const summaries = normalizeSummaries(parsedJson);
     return Object.keys(summaries).length ? summaries : null;
-  } catch {
+  } catch (err) {
+    console.error("[askGateway] failed:", err);
     return null;
   }
 }
@@ -90,7 +112,7 @@ async function askOpenAI(prompt: string): Promise<Record<string, string>> {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4.1-mini",
+      model: "gpt-4o-mini",
       input: prompt,
       text: {
         format: {
