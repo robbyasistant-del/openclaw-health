@@ -200,10 +200,10 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
   const escaped = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
   try {
     const { stdout } = await execAsync(
-      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout 120`,
+      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout 10`,
       {
         cwd: BACKUP_REPO_PATH,
-        timeout: 130000,
+        timeout: 15000,
         windowsHide: true,
         maxBuffer: 1024 * 1024,
       }
