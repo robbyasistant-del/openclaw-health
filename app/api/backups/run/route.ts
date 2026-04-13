@@ -197,7 +197,7 @@ async function sanitizeSecretsInDir(dirPath: string): Promise<void> {
 }
 
 async function askAgentConfirmation(prompt: string): Promise<string> {
-  const escaped = prompt.replace(/"/g, '\\"');
+  const escaped = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
   try {
     const { stdout } = await execAsync(
       `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout 120`,
