@@ -10,32 +10,28 @@ export async function GET() {
     const result = await gatewayClient.listAgents();
 
     if (!result.success) {
-      // Si falla la conexión con el Gateway, devolvemos datos de ejemplo
-      // para que la UI funcione durante desarrollo
-      console.warn("[API] Gateway connection failed, returning mock data:", result.error);
-      
+      // Fallback silencioso a mock data si el CLI falla
+      console.info("[API] /api/agents usando fallback local:", result.error);
+
       return NextResponse.json({
         agents: getMockAgents(),
         source: "mock",
-        warning: "Gateway no disponible, mostrando datos de ejemplo",
+        warning: "Listado de agentes en modo fallback: " + result.error,
       });
     }
 
     return NextResponse.json({
       agents: result.data || [],
-      source: "gateway",
+      source: "openclaw-cli",
     });
   } catch (error) {
     console.error("[API] Error fetching agents:", error);
     
-    return NextResponse.json(
-      {
-        agents: getMockAgents(),
-        source: "mock",
-        error: "Error conectando con Gateway",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      agents: getMockAgents(),
+      source: "mock",
+      warning: "Error conectando con Gateway, mostrando datos de ejemplo",
+    });
   }
 }
 

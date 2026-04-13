@@ -1,0 +1,29 @@
+# Openclaw Health Prompts
+
+Store reusable English prompts for project features here.
+
+---
+
+## EXPLORER_FOLDER_PURPOSE_V1
+**Feature:** Workspace explorer → folder purpose summaries shown next to folders after clicking **Explore**.
+
+**Prompt template:**
+
+```text
+You are helping Openclaw Health describe an agent workspace in a web explorer.
+
+Explore the workspace route: <path>
+Top-level folders in the current listing:
+<folder_list>
+
+Summarize in one short English line the reason each folder exists.
+Return strict JSON with this exact shape:
+{"folders":[{"name":"folder-name","summary":"one-line purpose"}]}
+
+Rules:
+- Only include folders from the provided list.
+- Write one concise line per folder.
+- Infer purpose from the folder name and the workspace context.
+- If the purpose is uncertain, still provide the best cautious guess.
+- Do not include markdown or any text outside the JSON object.
+```

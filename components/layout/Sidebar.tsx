@@ -9,6 +9,7 @@ import {
   HeartPulse,
   Briefcase,
   Shield,
+  DatabaseBackup,
 } from "lucide-react";
 
 const modules = [
@@ -16,6 +17,7 @@ const modules = [
   { name: "Doctor", href: "/doctor", icon: Stethoscope },
   { name: "HealthChecks", href: "/health-checks", icon: HeartPulse },
   { name: "Workspace", href: "/workspace", icon: Briefcase },
+  { name: "Backups", href: "/backups", icon: DatabaseBackup },
   { name: "Security", href: "/security", icon: Shield },
   { name: "Config", href: "/config", icon: Settings },
 ];
