@@ -33,18 +33,68 @@ Rules:
 ```
 
 ## BACKUP_V1
-Identify and back up everything that defines how my agent works:
-- SOUL.md and MEMORY.md (and any other memory/personality files)
-- All cron job definitions
-- All skill configurations
-- The gateway config file
-- All workspace setup files and custom workflow definitions
-- Any other config that I'd need to restore my setup from scratch
+You are performing a COMPLETE backup of the entire OpenClaw system configuration.
 
-Before pushing to the repo:
-1. Scan ALL files for leaked secrets: API keys, tokens, passwords, credentials, private URLs. Check environment variables, config files, anything that might contain sensitive data.
-2. If any secrets are found, replace them with descriptive placeholders like [CLAUDE_API_KEY], [COOLIFY_API_TOKEN], [DISCORD_BOT_TOKEN] etc. - so I know exactly what to fill in if I ever need to restore.
-3. Commit with a message including the date and a summary of what changed since last backup.
-4. Push to the private GitHub backup repository.
+You MUST scan, collect, and back up EVERYTHING from the following locations:
 
-Send a one-line confirmation when done. If any file is missing or the push fails, report it as an error.
+### 1. Global OpenClaw configuration (~/.openclaw/)
+- openclaw.json (main gateway config)
+- openclaw.json.bak and openclaw.json.bak.* (backup versions of gateway config)
+- openclaw-new.json
+- exec-approvals.json (approval rules and permissions)
+- gateway.cmd
+- .env (global environment variables)
+- update-check.json
+
+### 2. Workspace root configuration files (~/.openclaw/workspace/)
+- AGENTS.md
+- SOUL.md
+- MEMORY.md
+- USER.md
+- IDENTITY.md
+- TOOLS.md
+- HEARTBEAT.md
+- BOOTSTRAP.md (if exists)
+- PLAYBOOK_SUBAGENTS.md
+- .env and .env.example
+- next.config.mjs / next.config.ts / next.config.js
+- package.json and package-lock.json
+- tsconfig.json
+- tailwind.config.ts / tailwind.config.js
+- prisma.config.ts
+- jest.config.js and jest.setup.js
+- vercel.json
+- components.json
+- postcss.config.mjs
+- middleware.ts
+- .eslintrc.json
+- .prettierrc and .prettierignore
+- .lintstagedrc.json
+
+### 3. ALL agent configurations (~/.openclaw/agents/*/)
+For EVERY agent directory (main, codex, rob_android, rob_asogrowth, rob_market, rob_tester, rob_uxdesigner, rob_web, and any others), back up:
+- agent/auth.json
+- agent/auth-profiles.json
+- agent/models.json
+- sessions/sessions.json (session index file)
+
+### 4. ALL installed skills (~/.openclaw/workspace/skills/*/)
+- Every SKILL.md inside every skill subdirectory
+- Any critical configuration files inside skill folders
+
+### 5. Project-specific prompts and docs
+- prompts.md (from the openclaw-health project)
+- Any critical docs/ or memory/ files
+
+### Pre-commit security requirements (MANDATORY):
+1. Scan EVERY collected file for leaked secrets: API keys, tokens, passwords, credentials, bearer tokens, private URLs, SSH keys, JWTs.
+2. Replace ANY found secret with a descriptive placeholder like [OPENAI_API_KEY], [GITHUB_TOKEN], [BEARER_TOKEN], [COOLIFY_API_TOKEN], [DISCORD_BOT_TOKEN], [DB_PASSWORD], etc.
+3. Ensure placeholders are clear so restoration is possible without guessing.
+
+### Git operations (MANDATORY):
+1. Add ALL collected files to the backup repo.
+2. Commit with a message that includes: the current ISO date, the number of agents backed up, and a brief summary of what changed.
+3. Push to the private GitHub backup repository master branch.
+4. If any file cannot be read or the push fails, report it as an error with details.
+
+Send a concise confirmation when done, including how many agent configs and skill files were backed up. If anything failed, report the exact error.
