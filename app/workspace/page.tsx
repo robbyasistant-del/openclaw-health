@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Bot, Check, AlertCircle, Loader2, ChevronRight, ChevronDown, Folder, FileText } from "lucide-react";
+import { Bot, Check, AlertCircle, Loader2, ChevronRight, ChevronDown, Folder, FileText, Scan, Copy, HardDrive } from "lucide-react";
+import { DiskUsageAnalyzer, type ScanData } from "@/components/disk-usage-analyzer";
 
 interface Agent {
   id: string;
@@ -88,6 +89,12 @@ export default function WorkspacePage() {
   const [exploreOpen, setExploreOpen] = useState(false);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [summaryLoading, setSummaryLoading] = useState(false);
+  
+  // Scan states
+  const [scanData, setScanData] = useState<ScanData | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
 
   useEffect(() => {
     fetchAgents();
@@ -123,6 +130,10 @@ export default function WorkspacePage() {
     setTreeError(null);
     setSummaries({});
     setExploreOpen(false);
+    // Reset scan state
+    setScanData(null);
+    setScanError(null);
+    setScanOpen(false);
     console.log("[Workspace] Agent selected:", agent.id);
   };
 
@@ -166,6 +177,39 @@ export default function WorkspacePage() {
     if (!exploreOpen) {
       fetchTree(selectedAgent.workspace);
     }
+  };
+
+  const handleScan = async () => {
+    if (!selectedAgent?.workspace) return;
+    
+    setScanOpen(true);
+    setIsScanning(true);
+    setScanError(null);
+    setScanData(null);
+    
+    try {
+      const response = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedAgent.workspace }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Error al escanear el directorio");
+      }
+      
+      setScanData(data);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleCopyPath = (path: string) => {
+    navigator.clipboard.writeText(path);
   };
 
   const getStatusColor = (status: string) => {
@@ -317,55 +361,147 @@ export default function WorkspacePage() {
                 </div>
 
                 {selectedAgent.workspace && (
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                          Workspace path
-                        </p>
-                        <p className="mt-1 break-all font-mono text-sm text-zinc-300">
-                          {selectedAgent.workspace}
-                        </p>
+                  <div className="space-y-4">
+                    {/* Workspace Path Card - Mejorado */}
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <HardDrive className="h-4 w-4 text-emerald-500" />
+                        <span className="text-xs font-medium uppercase tracking-wide text-emerald-400">
+                          Workspace del Agente
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleExplore}
-                        className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-500"
-                      >
-                        {exploreOpen ? "Cerrar explorador" : "Explorar"}
-                      </button>
+                      
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+                            <p className="font-mono text-sm text-zinc-200 break-all">
+                              {selectedAgent.workspace}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-500 pl-6">
+                            Path absoluto del workspace
+                          </p>
+                        </div>
+                        
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPath(selectedAgent.workspace!)}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 px-3 py-2 text-sm font-medium text-zinc-200 transition"
+                            title="Copiar path"
+                          >
+                            <Copy className="h-4 w-4" />
+                            <span className="hidden sm:inline">Copiar</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={handleExplore}
+                            className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                              exploreOpen
+                                ? "bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
+                                : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                            }`}
+                          >
+                            <Folder className="h-4 w-4" />
+                            {exploreOpen ? "Cerrar explorador" : "Explorar"}
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={handleScan}
+                            disabled={isScanning}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-3 py-2 text-sm font-medium text-white transition"
+                          >
+                            {isScanning ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Escaneando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Scan className="h-4 w-4" />
+                                <span>Escanear</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
+                    {/* Explorador Simple */}
                     {exploreOpen && (
-                      <div className="mt-4 rounded border border-zinc-800 bg-zinc-900/50 p-2">
-                        {treeLoading && (
-                          <div className="flex items-center gap-2 py-2 text-sm text-zinc-400">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Cargando estructura...
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+                        <h4 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
+                          <Folder className="h-4 w-4 text-amber-400" />
+                          Explorador de Archivos
+                        </h4>
+                        <div className="rounded border border-zinc-800 bg-zinc-900/50 p-2">
+                          {treeLoading && (
+                            <div className="flex items-center gap-2 py-2 text-sm text-zinc-400">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cargando estructura...
+                            </div>
+                          )}
+                          {!treeLoading && summaryLoading && (
+                            <div className="flex items-center gap-2 py-2 text-sm text-zinc-500">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Pidiendo al LLM un resumen de las carpetas...
+                            </div>
+                          )}
+                          {treeError && (
+                            <div className="py-2 text-sm text-red-400">
+                              {treeError}
+                            </div>
+                          )}
+                          {!treeLoading && !treeError && tree && tree.length > 0 && (
+                            <div className="max-h-80 overflow-auto">
+                              {tree.map((node) => (
+                                <TreeNodeItem key={node.name} node={node} summaries={summaries} />
+                              ))}
+                            </div>
+                          )}
+                          {!treeLoading && !treeError && tree && tree.length === 0 && (
+                            <p className="py-2 text-sm text-zinc-500">
+                              Directorio vacío.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Disk Usage Analyzer - WinDirStat Style */}
+                    {scanOpen && (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+                        <h4 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
+                          <Scan className="h-4 w-4 text-amber-400" />
+                          Análisis de Uso de Disco
+                        </h4>
+                        
+                        {isScanning && (
+                          <div className="flex items-center justify-center gap-2 py-8 text-zinc-400">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span>Analizando directorio... esto puede tomar un momento</span>
                           </div>
                         )}
-                        {!treeLoading && summaryLoading && (
-                          <div className="flex items-center gap-2 py-2 text-sm text-zinc-500">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Pidiendo al LLM un resumen de las carpetas...
+                        
+                        {scanError && (
+                          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4" />
+                              <span>{scanError}</span>
+                            </div>
                           </div>
                         )}
-                        {treeError && (
-                          <div className="py-2 text-sm text-red-400">
-                            {treeError}
-                          </div>
-                        )}
-                        {!treeLoading && !treeError && tree && tree.length > 0 && (
-                          <div className="max-h-80 overflow-auto">
-                            {tree.map((node) => (
-                              <TreeNodeItem key={node.name} node={node} summaries={summaries} />
-                            ))}
-                          </div>
-                        )}
-                        {!treeLoading && !treeError && tree && tree.length === 0 && (
-                          <p className="py-2 text-sm text-zinc-500">
-                            Directorio vacío.
-                          </p>
+                        
+                        {!isScanning && !scanError && scanData && (
+                          <DiskUsageAnalyzer 
+                            data={scanData} 
+                            onSelect={(paths) => {
+                              console.log("[Workspace] Selected paths:", paths);
+                            }}
+                          />
                         )}
                       </div>
                     )}
