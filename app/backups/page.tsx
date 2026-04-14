@@ -99,13 +99,25 @@ export default function BackupsPage() {
     }
   };
 
+  const BACKUP_TIMEOUT_MS = 900_000; // 15 minutos
+
   const runBackup = async () => {
     try {
       setRunningBackup(true);
       setRunResult(null);
       setCurrentRun(null);
-      const res = await fetch("/api/backups/run", { method: "POST" });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), BACKUP_TIMEOUT_MS);
+
+      const res = await fetch("/api/backups/run", {
+        method: "POST",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
       const data = await res.json();
+
       if (data.runId) {
         setCurrentRunId(data.runId);
       } else {
@@ -362,8 +374,18 @@ export default function BackupsPage() {
               {currentRun && (
                 <p className="mt-1 text-amber-100/80">
                   Estado: {runStatusLabel(currentRun.status)} · Iniciado: {formatDate(currentRun.startedAt)}
+                  {currentRun.message ? ` · ${currentRun.message}` : ""}
                 </p>
               )}
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-amber-900/30">
+                <div className="h-full animate-[shimmer_1.5s_infinite] rounded-full bg-amber-400" style={{ width: "40%" }} />
+              </div>
+              <style jsx>{`
+                @keyframes shimmer {
+                  0% { transform: translateX(-100%); }
+                  100% { transform: translateX(250%); }
+                }
+              `}</style>
             </div>
           )}
 
