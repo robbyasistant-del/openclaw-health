@@ -233,7 +233,7 @@ export class OpenClawGatewayClient extends EventEmitter {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
-          id: "openclaw-health",
+          id: "cli",
           version: "1.0.0",
           platform: typeof process !== "undefined" ? process.platform || "web" : "web",
           mode: "ui",
