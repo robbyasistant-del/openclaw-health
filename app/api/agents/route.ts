@@ -10,20 +10,23 @@ export async function GET() {
   try {
     const client = getOpenClawGatewayClient();
 
-    if (!client.isConnected()) {
-      try {
-        await client.connect();
-      } catch (err) {
-        console.error("[API /agents] Failed to connect to Gateway:", err);
-        return NextResponse.json(
-          {
-            agents: getMockAgents(),
-            source: "mock",
-            warning: "No se pudo conectar al Gateway. Mostrando datos de fallback.",
-          },
-          { status: 503 }
-        );
-      }
+    // Force reconnect to ensure fresh connection with correct scopes
+    if (client.isConnected()) {
+      client.forceReconnect();
+    }
+
+    try {
+      await client.connect();
+    } catch (err) {
+      console.error("[API /agents] Failed to connect to Gateway:", err);
+      return NextResponse.json(
+        {
+          agents: getMockAgents(),
+          source: "mock",
+          warning: "No se pudo conectar al Gateway. Mostrando datos de fallback.",
+        },
+        { status: 503 }
+      );
     }
 
     const agents = await client.listAgents();
