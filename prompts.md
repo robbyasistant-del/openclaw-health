@@ -16,9 +16,9 @@ Explore the workspace route: <path>
 Top-level folders in the current listing:
 <folder_list>
 
-Summarize in one short English line the reason each folder exists.
+Summarize in between one and three short English lines the reason each folder exists.
 Return strict JSON with this exact shape:
-{"folders":[{"name":"folder-name","summary":"one-line purpose"}]}
+{"folders":[{"name":"folder-name","summary":"purpose description"}]}
 
 Rules:
 - DO NOT ask clarifying questions.
@@ -36,13 +36,12 @@ Rules:
 You are responsible for creating a COMPLETE backup of the entire OpenClaw installation.
 
 Your task:
-1. Locate the OpenClaw installation directory and workspace root. Look in the user's home for a directory commonly named `.openclaw` and identify the current working workspace.
+1. Locate the OpenClaw installation directory and workspace root. Look in the user's home for a directory commonly named `.openclaw` and identify all agents working workspaces.
 2. Recursively discover and collect ALL configuration files that are required to fully reconstruct this OpenClaw setup from scratch.
 
 ### Categories of files you MUST back up
 - **Global OpenClaw configuration**: Find and back up the main gateway configuration file (commonly named `openclaw.json`), any backup/variant versions of it (files with `.bak`, `.bak.*`, `-new`, or similar suffixes), execution approval rules, gateway launcher scripts, global environment files, and update check files.
-- **Workspace identity and memory files**: Collect all top-level identity, personality, memory, and agent-instruction files (e.g., files named `SOUL.md`, `MEMORY.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, `HEARTBEAT.md`, `BOOTSTRAP.md`, `AGENTS.md`, and any playbook or subagent instruction files).
-- **Workspace project configuration**: Collect all root-level configuration files that define the runtime, build, styling, database, testing, linting, and formatting of projects inside the workspace (e.g., `package.json`, `tsconfig.json`, `next.config.*`, `tailwind.config.*`, `.env`, `.env.example`, and similar project-level config files).
+- **Workspace identity and memory files**: Collect all top-level identity, personality, memory, and agent-instruction files (e.g., files named `SOUL.md`, `MEMORY.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, `HEARTBEAT.md`, `BOOTSTRAP.md`, `AGENTS.md`, and any playbook or subagent instruction files). This for each agent workspace.
 - **Agent configurations**: For EVERY agent directory found under the agents path, collect each agent's authentication profiles, model bindings, and session index files. These are typically located inside an `agent/` subdirectory and a `sessions/` subdirectory within each agent folder.
 - **Skills**: For every installed skill directory, collect the primary skill definition file (typically `SKILL.md`) and any critical configuration files the skill relies on.
 - **Project prompts and documentation**: Collect the project's `prompts.md` and any other critical documentation or memory files stored in `docs/` or `memory/` directories.

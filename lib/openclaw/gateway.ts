@@ -2,6 +2,9 @@
  * OpenClaw Gateway WebSocket Client
  * Módulo central para comunicación RPC + streaming con el Gateway de OpenClaw.
  * NUNCA usa CLI. Todo pasa por WebSocket hacia el Gateway.
+ * 
+ * NOTA: Esta versión NO usa singleton. Crea una instancia fresca cada vez
+ * para evitar problemas de estado cacheado en hot-reloads de Next.js.
  */
 
 import { EventEmitter } from "events";
@@ -12,13 +15,6 @@ const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || "ws://127.0.0.1:18789";
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 const WS_TIMEOUT_MS = Number(process.env.OPENCLAW_GATEWAY_WS_TIMEOUT_MS || "30000");
 const RPC_TIMEOUT_MS = Number(process.env.OPENCLAW_GATEWAY_RPC_TIMEOUT_MS || "30000");
-
-// Deduplicación global de eventos (sobrevive a hot-reload de Next.js)
-const GLOBAL_EVENT_CACHE_KEY = "__openclaw_health_events__";
-if (!(GLOBAL_EVENT_CACHE_KEY in globalThis)) {
-  (globalThis as Record<string, unknown>)[GLOBAL_EVENT_CACHE_KEY] = new Map<string, number>();
-}
-const globalProcessedEvents = (globalThis as unknown as Record<string, Map<string, number>>)[GLOBAL_EVENT_CACHE_KEY];
 
 export interface GatewayModelChoice {
   id: string;
@@ -83,6 +79,7 @@ export class OpenClawGatewayClient extends EventEmitter {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
   private readonly MAX_PROCESSED_EVENTS = 2000;
+  private processedEvents: Map<string, number>;
 
   constructor(
     private url: string = GATEWAY_URL,
@@ -90,6 +87,8 @@ export class OpenClawGatewayClient extends EventEmitter {
   ) {
     super();
     this.on("error", () => {});
+    // Cada instancia tiene su propio cache de eventos
+    this.processedEvents = new Map<string, number>();
   }
 
   // ───────────────────────── Connection ─────────────────────────
@@ -105,6 +104,7 @@ export class OpenClawGatewayClient extends EventEmitter {
       if (this.token) wsUrl.searchParams.set("token", this.token);
 
       console.log("[OpenClaw] Connecting to:", wsUrl.toString().replace(/token=[^&]+/, "token=***"));
+      console.log("[OpenClaw] Using scopes: operator.admin, operator.read, operator.write");
 
       this.ws = new WebSocket(wsUrl.toString());
 
@@ -177,10 +177,10 @@ export class OpenClawGatewayClient extends EventEmitter {
 
     if (!isRpcResponse) {
       const eventId = this.generateEventId(data);
-      if (globalProcessedEvents.has(eventId)) {
+      if (this.processedEvents.has(eventId)) {
         return;
       }
-      globalProcessedEvents.set(eventId, Date.now());
+      this.processedEvents.set(eventId, Date.now());
       this.performCacheCleanup();
     }
 
@@ -225,6 +225,8 @@ export class OpenClawGatewayClient extends EventEmitter {
   ): void {
     const nonce = data.payload?.nonce;
     const requestId = randomUUID();
+    
+    // SCOPES CORRECTOS para el Gateway de OpenClaw
     const response = {
       type: "req",
       id: requestId,
@@ -261,6 +263,7 @@ export class OpenClawGatewayClient extends EventEmitter {
     });
 
     console.log("[OpenClaw] Sending challenge response (nonce:", nonce, ")");
+    console.log("[OpenClaw] Challenge response:", JSON.stringify(response, null, 2));
     this.ws!.send(JSON.stringify(response));
   }
 
@@ -350,10 +353,10 @@ export class OpenClawGatewayClient extends EventEmitter {
   }
 
   private performCacheCleanup(): void {
-    if (globalProcessedEvents.size > this.MAX_PROCESSED_EVENTS) {
-      const entries = Array.from(globalProcessedEvents.entries()).sort((a, b) => a[1] - b[1]);
+    if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
+      const entries = Array.from(this.processedEvents.entries()).sort((a, b) => a[1] - b[1]);
       const toRemove = entries.slice(0, entries.length - this.MAX_PROCESSED_EVENTS + 200);
-      for (const [id] of toRemove) globalProcessedEvents.delete(id);
+      for (const [id] of toRemove) this.processedEvents.delete(id);
     }
   }
 
@@ -378,6 +381,7 @@ export class OpenClawGatewayClient extends EventEmitter {
     this.connecting = null;
     this.pendingRequests.forEach(({ reject }) => reject(new Error("Connection reset")));
     this.pendingRequests.clear();
+    this.processedEvents.clear();
   }
 
   disconnect(): void {
@@ -397,12 +401,17 @@ export class OpenClawGatewayClient extends EventEmitter {
   }
 }
 
-// Singleton
-let clientInstance: OpenClawGatewayClient | null = null;
+// FUNCIÓN DE FÁBRICA - NO SINGLETON
+// Cada llamada crea una instancia completamente nueva
+export function createOpenClawGatewayClient(
+  url?: string,
+  token?: string
+): OpenClawGatewayClient {
+  return new OpenClawGatewayClient(url, token);
+}
 
+// Mantenemos getOpenClawGatewayClient para compatibilidad, pero 
+// recomendamos usar createOpenClawGatewayClient para conexiones frescas
 export function getOpenClawGatewayClient(): OpenClawGatewayClient {
-  if (!clientInstance) {
-    clientInstance = new OpenClawGatewayClient();
-  }
-  return clientInstance;
+  return createOpenClawGatewayClient();
 }

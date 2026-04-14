@@ -1,35 +1,30 @@
 import { NextResponse } from "next/server";
-import { getOpenClawGatewayClient } from "@/lib/openclaw";
+import { createOpenClawGatewayClient } from "@/lib/openclaw";
 
 /**
  * GET /api/agents
  * Devuelve la lista de agentes disponibles en el Gateway de OpenClaw
  * vía API WebSocket (nunca CLI).
+ * 
+ * ENFOQUE SIN SINGLETON: Cada request crea una instancia COMPLETAMENTE NUEVA
+ * del cliente para evitar cualquier problema de estado cacheado.
  */
 export async function GET() {
+  // Crear cliente FRESNO - no reuse nada de instancias anteriores
+  const client = createOpenClawGatewayClient();
+
   try {
-    const client = getOpenClawGatewayClient();
-
-    // Force reconnect to ensure fresh connection with correct scopes
-    if (client.isConnected()) {
-      client.forceReconnect();
-    }
-
-    try {
-      await client.connect();
-    } catch (err) {
-      console.error("[API /agents] Failed to connect to Gateway:", err);
-      return NextResponse.json(
-        {
-          agents: getMockAgents(),
-          source: "mock",
-          warning: "No se pudo conectar al Gateway. Mostrando datos de fallback.",
-        },
-        { status: 503 }
-      );
-    }
-
+    console.log("[API /agents] Creating fresh WebSocket connection...");
+    
+    await client.connect();
+    console.log("[API /agents] Connected successfully");
+    
+    console.log("[API /agents] Calling agents.list...");
     const agents = await client.listAgents();
+    console.log(`[API /agents] Got ${agents.length} agents`);
+
+    // Desconectar limpiamente
+    client.disconnect();
 
     return NextResponse.json({
       agents: agents.map((a) => ({
@@ -49,12 +44,16 @@ export async function GET() {
       source: "gateway-api",
     });
   } catch (error) {
-    console.error("[API /agents] Error fetching agents:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error("[API /agents] Error:", errorMsg);
+    
+    // Asegurar desconexión en caso de error
+    client.disconnect();
 
     return NextResponse.json({
       agents: getMockAgents(),
       source: "mock",
-      warning: "Error conectando con Gateway, mostrando datos de ejemplo",
+      warning: `Error conectando con Gateway: ${errorMsg}`,
     });
   }
 }
@@ -65,36 +64,36 @@ export async function GET() {
 function getMockAgents() {
   return [
     {
-      id: "agent-1",
-      name: "Health Assistant",
-      description: "Agente especializado en consultas de salud general",
+      id: "main",
+      name: "Main Agent",
+      description: "Agente principal de OpenClaw",
       status: "active",
       lastActive: new Date().toISOString(),
-      capabilities: ["health", "advice", "monitoring"],
+      capabilities: ["orchestration", "main"],
     },
     {
-      id: "agent-2",
-      name: "Medical Records",
-      description: "Gestiona y analiza historiales médicos",
+      id: "rob_web",
+      name: "Rob Web",
+      description: "Agente especialista en desarrollo web",
       status: "active",
       lastActive: new Date().toISOString(),
-      capabilities: ["records", "analysis", "reports"],
+      capabilities: ["web", "frontend", "backend"],
     },
     {
-      id: "agent-3",
-      name: "Symptom Checker",
-      description: "Evaluación de síntomas y recomendaciones",
-      status: "inactive",
-      lastActive: new Date(Date.now() - 86400000).toISOString(),
-      capabilities: ["symptoms", "diagnosis", "recommendations"],
-    },
-    {
-      id: "agent-4",
-      name: "Appointment Scheduler",
-      description: "Programación y gestión de citas médicas",
+      id: "rob_android",
+      name: "Rob Android",
+      description: "Agente especialista en desarrollo Android nativo",
       status: "active",
       lastActive: new Date().toISOString(),
-      capabilities: ["scheduling", "calendar", "reminders"],
+      capabilities: ["android", "mobile"],
+    },
+    {
+      id: "rob_tester",
+      name: "Rob Tester",
+      description: "Agente especialista en testing y QA",
+      status: "active",
+      lastActive: new Date().toISOString(),
+      capabilities: ["testing", "qa"],
     },
   ];
 }

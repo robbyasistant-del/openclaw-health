@@ -7,6 +7,7 @@
 
 export {
   OpenClawGatewayClient,
+  createOpenClawGatewayClient,
   getOpenClawGatewayClient,
   type GatewayResponse,
   type GatewayConfigSnapshot,
