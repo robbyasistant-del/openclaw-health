@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { execSync, exec } from "child_process";
-import { promisify } from "util";
+import { execSync } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import { prisma } from "@/lib/db";
-
-const execAsync = promisify(exec);
+import { complete } from "@/lib/openclaw";
 
 const GATEWAY_LLM_TIMEOUT_SECONDS = Number(process.env.OPENCLAW_GATEWAY_LLM_TIMEOUT_SECONDS || "600");
 const GATEWAY_LLM_TIMEOUT_MS = GATEWAY_LLM_TIMEOUT_SECONDS * 1000;
@@ -201,32 +199,15 @@ async function sanitizeSecretsInDir(dirPath: string): Promise<void> {
 }
 
 async function askAgentConfirmation(prompt: string): Promise<string> {
-  const escaped = prompt.replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
   try {
-    const agentPromise = execAsync(
-      `openclaw agent --agent main --to +15555550123 --message "${escaped}" --json --timeout ${GATEWAY_LLM_TIMEOUT_SECONDS}`,
-      {
-        cwd: BACKUP_REPO_PATH,
-        timeout: GATEWAY_LLM_TIMEOUT_MS + 5000,
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-      }
-    );
-
-    // hard safety cap: if execAsync itself hangs, force-fail after 30s
-    const safetyTimeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Agent call safety timeout")), 30000)
-    );
-
-    const { stdout } = await Promise.race([agentPromise, safetyTimeout]);
-
-    const parsed = JSON.parse(stdout);
-    const payloads = parsed?.payloads;
-    if (Array.isArray(payloads) && payloads.length > 0 && typeof payloads[0]?.text === "string") {
-      return payloads[0].text.trim();
-    }
-    if (typeof parsed?.text === "string") return parsed.text.trim();
-    return stdout.trim();
+    const result = await complete(prompt, {
+      systemPrompt:
+        "Eres el agente principal de OpenClaw Health. Confirmas cuando un backup se completó correctamente y reportas cualquier problema de forma concisa.",
+      temperature: 0.4,
+      maxTokens: 2048,
+      timeoutMs: GATEWAY_LLM_TIMEOUT_MS,
+    });
+    return result.content.trim();
   } catch {
     return "Backup committed and pushed. Agent confirmation skipped (LLM provider unavailable).";
   }
