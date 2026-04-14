@@ -1,32 +1,53 @@
 import { NextResponse } from "next/server";
-import { gatewayClient } from "@/lib/gateway/client";
+import { getOpenClawGatewayClient } from "@/lib/openclaw";
 
 /**
  * GET /api/agents
  * Devuelve la lista de agentes disponibles en el Gateway de OpenClaw
+ * vía API WebSocket (nunca CLI).
  */
 export async function GET() {
   try {
-    const result = await gatewayClient.listAgents();
+    const client = getOpenClawGatewayClient();
 
-    if (!result.success) {
-      // Fallback silencioso a mock data si el CLI falla
-      console.info("[API] /api/agents usando fallback local:", result.error);
-
-      return NextResponse.json({
-        agents: getMockAgents(),
-        source: "mock",
-        warning: "Listado de agentes en modo fallback: " + result.error,
-      });
+    if (!client.isConnected()) {
+      try {
+        await client.connect();
+      } catch (err) {
+        console.error("[API /agents] Failed to connect to Gateway:", err);
+        return NextResponse.json(
+          {
+            agents: getMockAgents(),
+            source: "mock",
+            warning: "No se pudo conectar al Gateway. Mostrando datos de fallback.",
+          },
+          { status: 503 }
+        );
+      }
     }
 
+    const agents = await client.listAgents();
+
     return NextResponse.json({
-      agents: result.data || [],
-      source: "openclaw-cli",
+      agents: agents.map((a) => ({
+        id: a.id,
+        name: a.identityName || a.name || a.id,
+        emoji: a.identityEmoji || "🤖",
+        workspace: a.workspace,
+        description: a.model,
+        status: "active",
+        lastActive: new Date().toISOString(),
+        capabilities: [
+          a.model,
+          `${a.bindings || 0} binding${a.bindings === 1 ? "" : "s"}`,
+          ...(a.isDefault ? ["default"] : []),
+        ],
+      })),
+      source: "gateway-api",
     });
   } catch (error) {
-    console.error("[API] Error fetching agents:", error);
-    
+    console.error("[API /agents] Error fetching agents:", error);
+
     return NextResponse.json({
       agents: getMockAgents(),
       source: "mock",
@@ -36,7 +57,7 @@ export async function GET() {
 }
 
 /**
- * Datos de ejemplo para desarrollo
+ * Datos de ejemplo para desarrollo / fallback
  */
 function getMockAgents() {
   return [
