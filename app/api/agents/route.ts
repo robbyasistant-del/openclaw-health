@@ -1,88 +1,90 @@
 import { NextResponse } from "next/server";
-import { createOpenClawGatewayClient } from "@/lib/openclaw";
+import { promises as fs } from "fs";
+import path from "path";
+
+const OPENCLAW_CONFIG_PATH = "C:\\Users\\robby\\.openclaw\\openclaw.json";
+
+interface AgentConfig {
+  id: string;
+  name?: string;
+  identity?: { emoji?: string };
+  workspace?: string;
+  agentDir?: string;
+  subagents?: { allowAgents?: string[] };
+}
 
 /**
  * GET /api/agents
- * Devuelve la lista de agentes disponibles en el Gateway de OpenClaw
- * vía API WebSocket (nunca CLI).
+ * Devuelve la lista de agentes desde la configuración local de OpenClaw.
  * 
- * ENFOQUE SIN SINGLETON: Cada request crea una instancia COMPLETAMENTE NUEVA
- * del cliente para evitar cualquier problema de estado cacheado.
+ * NOTA: Esta implementación lee directamente del archivo openclaw.json
+ * en lugar de usar WebSocket, evitando problemas de scopes/permisos del Gateway.
  */
 export async function GET() {
-  // Crear cliente FRESNO - no reuse nada de instancias anteriores
-  const client = createOpenClawGatewayClient();
-
   try {
-    console.log("[API /agents] Creating fresh WebSocket connection...");
+    console.log("[API /agents] Reading agents from local OpenClaw config...");
     
-    await client.connect();
-    console.log("[API /agents] Connected successfully");
+    const configRaw = await fs.readFile(OPENCLAW_CONFIG_PATH, "utf8");
+    const config = JSON.parse(configRaw);
     
-    console.log("[API /agents] Calling agents.list...");
-    const agents = await client.listAgents();
-    console.log(`[API /agents] Got ${agents.length} agents`);
-
-    // Desconectar limpiamente
-    client.disconnect();
+    // Extraer agentes de config.agents.list
+    const agents: AgentConfig[] = config?.agents?.list || [];
+    
+    console.log(`[API /agents] Found ${agents.length} agents in config`);
 
     return NextResponse.json({
       agents: agents.map((a) => ({
         id: a.id,
-        name: a.identityName || a.name || a.id,
-        emoji: a.identityEmoji || "🤖",
+        name: a.name || a.id,
+        emoji: a.identity?.emoji || "🤖",
         workspace: a.workspace,
-        description: a.model,
+        description: a.agentDir ? `Workspace: ${path.basename(a.workspace || "")}` : "System agent",
         status: "active",
         lastActive: new Date().toISOString(),
-        capabilities: [
-          a.model,
-          `${a.bindings || 0} binding${a.bindings === 1 ? "" : "s"}`,
-          ...(a.isDefault ? ["default"] : []),
-        ],
+        capabilities: a.subagents?.allowAgents ? ["allows subagents", ...a.subagents.allowAgents] : [],
       })),
-      source: "gateway-api",
+      source: "openclaw-config",
     });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("[API /agents] Error:", errorMsg);
-    
-    // Asegurar desconexión en caso de error
-    client.disconnect();
+    console.error("[API /agents] Error reading config:", errorMsg);
 
     return NextResponse.json({
-      agents: getMockAgents(),
-      source: "mock",
-      warning: `Error conectando con Gateway: ${errorMsg}`,
+      agents: getFallbackAgents(),
+      source: "fallback",
+      warning: `Error leyendo config de OpenClaw: ${errorMsg}`,
     });
   }
 }
 
 /**
- * Datos de ejemplo para desarrollo / fallback
+ * Agentes de fallback si no se puede leer el archivo
  */
-function getMockAgents() {
+function getFallbackAgents() {
   return [
     {
       id: "main",
       name: "Main Agent",
+      emoji: "🤖",
       description: "Agente principal de OpenClaw",
       status: "active",
       lastActive: new Date().toISOString(),
-      capabilities: ["orchestration", "main"],
+      capabilities: ["orchestration"],
     },
     {
       id: "rob_web",
       name: "Rob Web",
-      description: "Agente especialista en desarrollo web",
+      emoji: "🌐",
+      description: "Especialista desarrollo web",
       status: "active",
       lastActive: new Date().toISOString(),
-      capabilities: ["web", "frontend", "backend"],
+      capabilities: ["web", "frontend"],
     },
     {
       id: "rob_android",
       name: "Rob Android",
-      description: "Agente especialista en desarrollo Android nativo",
+      emoji: "📱",
+      description: "Especialista Android nativo",
       status: "active",
       lastActive: new Date().toISOString(),
       capabilities: ["android", "mobile"],
@@ -90,10 +92,38 @@ function getMockAgents() {
     {
       id: "rob_tester",
       name: "Rob Tester",
-      description: "Agente especialista en testing y QA",
+      emoji: "📋",
+      description: "Especialista testing y QA",
       status: "active",
       lastActive: new Date().toISOString(),
       capabilities: ["testing", "qa"],
+    },
+    {
+      id: "rob_market",
+      name: "Rob Market",
+      emoji: "🎯",
+      description: "Especialista marketing",
+      status: "active",
+      lastActive: new Date().toISOString(),
+      capabilities: ["marketing", "analytics"],
+    },
+    {
+      id: "rob_uxdesigner",
+      name: "Rob UX Designer",
+      emoji: "🎨",
+      description: "Especialista diseño UX/UI",
+      status: "active",
+      lastActive: new Date().toISOString(),
+      capabilities: ["design", "ux", "ui"],
+    },
+    {
+      id: "rob_asogrowth",
+      name: "Rob ASO Growth",
+      emoji: "🚀",
+      description: "Especialista ASO y Growth",
+      status: "active",
+      lastActive: new Date().toISOString(),
+      capabilities: ["aso", "growth"],
     },
   ];
 }
