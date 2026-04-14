@@ -147,6 +147,7 @@ export default function BackupsPage() {
         if (run && (run.status === "success" || run.status === "no_changes" || run.status === "failed")) {
           clearInterval(interval);
           setCurrentRunId(null);
+          setCurrentRun(null);
           setRunningBackup(false);
           setRunResult({
             success: run.status === "success" || run.status === "no_changes",
