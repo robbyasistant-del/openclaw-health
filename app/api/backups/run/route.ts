@@ -5,7 +5,7 @@ import path from "path";
 import { prisma } from "@/lib/db";
 import { complete } from "@/lib/openclaw";
 
-const GATEWAY_LLM_TIMEOUT_SECONDS = Number(process.env.OPENCLAW_GATEWAY_LLM_TIMEOUT_SECONDS || "600");
+const GATEWAY_LLM_TIMEOUT_SECONDS = Number(process.env.OPENCLAW_GATEWAY_LLM_TIMEOUT_SECONDS || "900");
 const GATEWAY_LLM_TIMEOUT_MS = GATEWAY_LLM_TIMEOUT_SECONDS * 1000;
 
 const BACKUP_REPO_PATH = "C:\\Users\\robby\\.openclaw\\workspace\\openclaw-backups";
@@ -14,39 +14,6 @@ const OPENCLAW_ROOT = "C:\\Users\\robby\\.openclaw";
 const AGENTS_ROOT = "C:\\Users\\robby\\.openclaw\\agents";
 const SKILLS_ROOT = "C:\\Users\\robby\\.openclaw\\workspace\\skills";
 const PROMPTS_PATH = "C:\\Users\\robby\\.openclaw\\workspace\\Product_openclaw_health\\prompts.md";
-
-const WORKSPACE_FILES: string[] = [
-  "AGENTS.md",
-  "SOUL.md",
-  "MEMORY.md",
-  "USER.md",
-  "IDENTITY.md",
-  "TOOLS.md",
-  "HEARTBEAT.md",
-  "BOOTSTRAP.md",
-  "PLAYBOOK_SUBAGENTS.md",
-  ".env",
-  ".env.example",
-  "next.config.mjs",
-  "next.config.ts",
-  "next.config.js",
-  "package.json",
-  "package-lock.json",
-  "tsconfig.json",
-  "tailwind.config.ts",
-  "tailwind.config.js",
-  "prisma.config.ts",
-  "jest.config.js",
-  "jest.setup.js",
-  "vercel.json",
-  "components.json",
-  "postcss.config.mjs",
-  "middleware.ts",
-  ".eslintrc.json",
-  ".prettierrc",
-  ".prettierignore",
-  ".lintstagedrc.json",
-];
 
 const OPENCLAW_FILES: string[] = [
   "openclaw.json",
@@ -62,20 +29,88 @@ const OPENCLAW_FILES: string[] = [
   "update-check.json",
 ];
 
-const AGENT_FILES: string[] = [
-  "agent/auth.json",
-  "agent/auth-profiles.json",
-  "agent/models.json",
-  "sessions/sessions.json",
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".next",
+  "dist",
+  "build",
+  ".git",
+  ".tmp",
+  ".turbo",
+  ".vercel",
+  "out",
+  "coverage",
+  "public",
+  "vendor",
+  "bin",
+  "obj",
+  "__pycache__",
+  ".pytest_cache",
+  ".venv",
+  ".venv-ui",
+  ".venv-whisper",
+]);
+
+const INCLUDE_EXTS = new Set([
+  ".md",
+  ".json",
+  ".env",
+  ".mjs",
+  ".yml",
+  ".yaml",
+]);
+
+const INCLUDE_NAMES = new Set([
+  ".env",
+  ".env.example",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+  "vercel.json",
+  "components.json",
+  ".eslintrc.json",
+  ".prettierrc",
+  ".prettierignore",
+  ".lintstagedrc.json",
+  ".lintstagedrc",
+  ".editorconfig",
+  ".gitignore",
+  ".nvmrc",
+]);
+
+const INCLUDE_PATTERNS = [
+  /^next\.config\./,
+  /^tailwind\.config\./,
+  /^postcss\.config\./,
+  /^jest\.config\./,
+  /^prisma\.config\./,
+  /^middleware\./,
+  /^\.eslintrc\./,
+  /^\.prettierrc/,
+  /^\.lintstagedrc/,
+  /^Dockerfile/,
+  /^docker-compose/,
+  /^README/,
+  /^LICENSE/,
+  /^PLAYBOOK_/,
+  /^BOOTSTRAP/,
 ];
 
-function extractBackupPrompt(markdown: string): string {
-  const marker = "## BACKUP_V1";
-  const start = markdown.indexOf(marker);
-  if (start === -1) throw new Error("Prompt BACKUP_V1 no encontrado");
-  const end = markdown.indexOf("##", start + marker.length);
-  const block = end === -1 ? markdown.slice(start) : markdown.slice(start, end);
-  return block.trim();
+function shouldIncludeFile(fileName: string): boolean {
+  if (INCLUDE_NAMES.has(fileName)) return true;
+  const ext = path.extname(fileName).toLowerCase();
+  if (INCLUDE_EXTS.has(ext)) return true;
+  for (const pattern of INCLUDE_PATTERNS) {
+    if (pattern.test(fileName)) return true;
+  }
+  return false;
+}
+
+function shouldSkipDir(dirName: string): boolean {
+  return SKIP_DIRS.has(dirName) || dirName.startsWith(".venv");
 }
 
 async function ensureDir(destPath: string): Promise<void> {
@@ -93,9 +128,21 @@ async function copyFileSafe(src: string, dest: string): Promise<void> {
   }
 }
 
-async function copyWorkspaceFiles(): Promise<void> {
-  for (const file of WORKSPACE_FILES) {
-    await copyFileSafe(path.join(WORKSPACE_ROOT, file), path.join(BACKUP_REPO_PATH, file));
+async function copyRecursive(srcDir: string, destDir: string): Promise<void> {
+  try {
+    const entries = await fs.readdir(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(srcDir, entry.name);
+      const destPath = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        if (shouldSkipDir(entry.name)) continue;
+        await copyRecursive(srcPath, destPath);
+      } else if (entry.isFile() && shouldIncludeFile(entry.name)) {
+        await copyFileSafe(srcPath, destPath);
+      }
+    }
+  } catch {
+    // ignore unreadable dirs
   }
 }
 
@@ -105,51 +152,20 @@ async function copyOpenclawGlobalFiles(): Promise<void> {
   }
 }
 
-async function copyAgentFiles(): Promise<void> {
-  try {
-    const agentDirs = await fs.readdir(AGENTS_ROOT);
-    for (const agentDir of agentDirs) {
-      const agentPath = path.join(AGENTS_ROOT, agentDir);
-      const stat = await fs.stat(agentPath);
-      if (!stat.isDirectory()) continue;
-
-      for (const relFile of AGENT_FILES) {
-        await copyFileSafe(
-          path.join(agentPath, relFile),
-          path.join(BACKUP_REPO_PATH, "agents", agentDir, relFile)
-        );
-      }
-    }
-  } catch {
-    // ignore if agents dir missing
-  }
-}
-
-async function copySkills(): Promise<void> {
-  try {
-    const skillDirs = await fs.readdir(SKILLS_ROOT);
-    for (const skillDir of skillDirs) {
-      const skillPath = path.join(SKILLS_ROOT, skillDir);
-      const stat = await fs.stat(skillPath);
-      if (!stat.isDirectory()) continue;
-
-      const skillMd = path.join(skillPath, "SKILL.md");
-      await copyFileSafe(skillMd, path.join(BACKUP_REPO_PATH, "skills", skillDir, "SKILL.md"));
-    }
-  } catch {
-    // ignore if skills dir missing
-  }
-}
-
 async function copyPromptsMd(): Promise<void> {
   await copyFileSafe(PROMPTS_PATH, path.join(BACKUP_REPO_PATH, "prompts.md"));
 }
 
 async function copyFilesToBackupRepo(): Promise<void> {
-  await copyWorkspaceFiles();
+  // Workspace completo (recursivo) – incluye todos los proyectos/agentes workspaces
+  await copyRecursive(WORKSPACE_ROOT, BACKUP_REPO_PATH);
+  // Agentes individuales (recursivo)
+  await copyRecursive(AGENTS_ROOT, path.join(BACKUP_REPO_PATH, "agents"));
+  // Skills (recursivo)
+  await copyRecursive(SKILLS_ROOT, path.join(BACKUP_REPO_PATH, "skills"));
+  // Config global de OpenClaw
   await copyOpenclawGlobalFiles();
-  await copyAgentFiles();
-  await copySkills();
+  // Prompts del proyecto
   await copyPromptsMd();
 }
 
@@ -176,10 +192,10 @@ async function sanitizeSecretsInDir(dirPath: string): Promise<void> {
       { regex: /gho_[a-zA-Z0-9]{20,}/g, placeholder: "[GITHUB_TOKEN]" },
       { regex: /gh[pousr]_[A-Za-z0-9_]{20,}/g, placeholder: "[GITHUB_TOKEN]" },
       { regex: /Bearer\s+[a-zA-Z0-9_\-\.]{20,}/g, placeholder: "[BEARER_TOKEN]" },
-      { regex: /api[_-]?key\s*[:=]\s*[\"']?[a-zA-Z0-9_\-]{10,}[\"']?/gi, placeholder: "[API_KEY]" },
-      { regex: /password\s*[:=]\s*[\"']?[^\"'\s\n]{4,}[\"']?/gi, placeholder: "[PASSWORD]" },
-      { regex: /token\s*[:=]\s*[\"']?[a-zA-Z0-9_\-]{10,}[\"']?/gi, placeholder: "[TOKEN]" },
-      { regex: /secret\s*[:=]\s*[\"']?[a-zA-Z0-9_\-]{10,}[\"']?/gi, placeholder: "[SECRET]" },
+      { regex: /api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_\-]{10,}["']?/gi, placeholder: "[API_KEY]" },
+      { regex: /password\s*[:=]\s*["']?[^"'\s\n]{4,}["']?/gi, placeholder: "[PASSWORD]" },
+      { regex: /token\s*[:=]\s*["']?[a-zA-Z0-9_\-]{10,}["']?/gi, placeholder: "[TOKEN]" },
+      { regex: /secret\s*[:=]\s*["']?[a-zA-Z0-9_\-]{10,}["']?/gi, placeholder: "[SECRET]" },
       { regex: /ssh-rsa\s+[A-Za-z0-9+\/]{50,}/g, placeholder: "[SSH_KEY]" },
       { regex: /-----BEGIN (RSA |OPENSSH |PRIVATE )?KEY-----[\s\S]*?-----END (RSA |OPENSSH |PRIVATE )?KEY-----/g, placeholder: "[PRIVATE_KEY]" },
       { regex: /eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/g, placeholder: "[JWT_TOKEN]" },
@@ -198,7 +214,7 @@ async function sanitizeSecretsInDir(dirPath: string): Promise<void> {
   }
 }
 
-async function askAgentConfirmation(prompt: string): Promise<string> {
+async function askAgentConfirmation(prompt: string): Promise<{ reply: string; llmError?: string }> {
   try {
     const result = await complete(prompt, {
       systemPrompt:
@@ -207,9 +223,14 @@ async function askAgentConfirmation(prompt: string): Promise<string> {
       maxTokens: 2048,
       timeoutMs: GATEWAY_LLM_TIMEOUT_MS,
     });
-    return result.content.trim();
-  } catch {
-    return "Backup committed and pushed. Agent confirmation skipped (LLM provider unavailable).";
+    return { reply: result.content.trim() };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("[Backup] LLM confirmation failed:", errorMsg);
+    return {
+      reply: "Backup committed and pushed. Agent confirmation skipped (LLM provider unavailable).",
+      llmError: errorMsg,
+    };
   }
 }
 
@@ -221,7 +242,7 @@ async function setRunMessage(runId: string, message: string): Promise<void> {
   }
 }
 
-async function processBackupRun(runId: string): Promise<{ status: string; committedAt?: string; agentReply?: string; message?: string; error?: string }> {
+async function processBackupRun(runId: string): Promise<{ status: string; committedAt?: string; agentReply?: string; message?: string; error?: string; llmError?: string }> {
   try {
     await setRunMessage(runId, "Copiando archivos...");
     await copyFilesToBackupRepo();
@@ -259,7 +280,7 @@ async function processBackupRun(runId: string): Promise<{ status: string; commit
     await setRunMessage(runId, "Esperando confirmación del agente (puede tardar)...");
     const promptsMd = await fs.readFile(PROMPTS_PATH, "utf8");
     const prompt = extractBackupPrompt(promptsMd);
-    const agentReply = await askAgentConfirmation(prompt);
+    const { reply: agentReply, llmError } = await askAgentConfirmation(prompt);
 
     await prisma.backupRun.update({
       where: { id: runId },
@@ -268,10 +289,11 @@ async function processBackupRun(runId: string): Promise<{ status: string; commit
         finishedAt: new Date(),
         committedAt: now,
         agentReply,
+        ...(llmError ? { error: llmError } : {}),
       },
     });
 
-    return { status: "success", committedAt: now, agentReply };
+    return { status: "success", committedAt: now, agentReply, ...(llmError ? { llmError } : {}) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.backupRun.update({
@@ -284,6 +306,15 @@ async function processBackupRun(runId: string): Promise<{ status: string; commit
     });
     return { status: "failed", error: message };
   }
+}
+
+function extractBackupPrompt(markdown: string): string {
+  const marker = "## BACKUP_V1";
+  const start = markdown.indexOf(marker);
+  if (start === -1) throw new Error("Prompt BACKUP_V1 no encontrado");
+  const end = markdown.indexOf("##", start + marker.length);
+  const block = end === -1 ? markdown.slice(start) : markdown.slice(start, end);
+  return block.trim();
 }
 
 export async function POST() {
@@ -306,5 +337,6 @@ export async function POST() {
     runId: run.id,
     committedAt: result.committedAt,
     agentReply: result.agentReply,
+    ...(result.llmError ? { llmError: result.llmError } : {}),
   });
 }
