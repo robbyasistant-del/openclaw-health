@@ -11,7 +11,7 @@ const GATEWAY_URL =
     .replace("wss://", "https://");
 
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
-const DEFAULT_MODEL = process.env.OPENCLAW_DEFAULT_MODEL || "anthropic/claude-sonnet-4-6";
+const DEFAULT_MODEL = process.env.OPENCLAW_DEFAULT_MODEL || "openclaw";
 const LLM_TIMEOUT_MS = Number(process.env.OPENCLAW_GATEWAY_LLM_TIMEOUT_MS || "300000");
 const MAX_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 3000;
