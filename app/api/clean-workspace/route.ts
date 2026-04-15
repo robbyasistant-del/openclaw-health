@@ -120,26 +120,46 @@ async function callLLM(prompt: string): Promise<{ success: boolean; analysis?: s
 }
 
 async function executeActions(workspacePath: string, actions: LLMAction[]) {
+  console.log(`[Execute] Starting with ${actions.length} actions`);
+  console.log(`[Execute] Workspace: ${workspacePath}`);
+  console.log(`[Execute] Actions:`, JSON.stringify(actions, null, 2));
+  
   const moved: string[] = [];
   const deleted: string[] = [];
   const errors: string[] = [];
 
   for (const action of actions) {
     const sourcePath = path.join(workspacePath, action.file);
+    console.log(`[Execute] Processing: ${action.file} -> ${action.action}`);
     
     try {
+      // Verificar que el archivo existe
+      try {
+        await fs.access(sourcePath);
+        console.log(`[Execute] File exists: ${sourcePath}`);
+      } catch {
+        console.error(`[Execute] File NOT FOUND: ${sourcePath}`);
+        errors.push(`${action.file}: File not found`);
+        continue;
+      }
+      
       if (action.action === "delete") {
         await fs.unlink(sourcePath);
         deleted.push(action.file);
+        console.log(`[Execute] Deleted: ${action.file}`);
       } else if (action.action === "move" && action.to) {
         const targetDir = path.join(workspacePath, action.to);
         const targetPath = path.join(targetDir, path.basename(action.file));
+        console.log(`[Execute] Moving to: ${targetPath}`);
         await fs.mkdir(targetDir, { recursive: true });
         await fs.rename(sourcePath, targetPath);
         moved.push(`${action.file} → ${action.to}`);
+        console.log(`[Execute] Moved: ${action.file} -> ${action.to}`);
       }
     } catch (err) {
-      errors.push(`${action.file}: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[Execute] ERROR for ${action.file}:`, errorMsg);
+      errors.push(`${action.file}: ${errorMsg}`);
     }
   }
 
@@ -148,6 +168,10 @@ async function executeActions(workspacePath: string, actions: LLMAction[]) {
     deleted.length > 0 ? `Eliminados ${deleted.length} archivos` : "",
     errors.length > 0 ? `${errors.length} errores` : "",
   ].filter(Boolean).join(". ") || "No se realizaron cambios.";
+  
+  console.log(`[Execute] Summary: ${summary}`);
+  console.log(`[Execute] Moved:`, moved);
+  console.log(`[Execute] Errors:`, errors);
 
   return { moved, deleted, errors, summary };
 }
