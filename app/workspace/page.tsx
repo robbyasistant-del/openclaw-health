@@ -202,13 +202,14 @@ export default function WorkspacePage() {
         body: JSON.stringify({ path: selectedAgent.workspace }),
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Error al limpiar workspace");
+        throw new Error(data.error || "Error al limpiar workspace");
       }
       
-      const data = await response.json();
-      const result = data.result;
+      // Verificar que tenemos un resultado válido
+      const result = data.result || {};
       
       // Formatear resultado
       let output = data.llmSummary || result.summary || "Limpieza completada.";
