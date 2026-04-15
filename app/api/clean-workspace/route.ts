@@ -70,30 +70,48 @@ const ALLOWED_ROOT_FILES = new Set([
   "license", "license.md", "changelog.md",
 ]);
 
-async function callLLM(prompt: string): Promise<string> {
-  const response = await fetch(GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${GATEWAY_TOKEN}`,
-    },
-    body: JSON.stringify({
-      model: "default",
-      messages: [
-        { role: "system", content: "You are a helpful assistant." },
-        { role: "user", content: prompt }
-      ],
-      max_tokens: 2000,
-      temperature: 0.3,
-    }),
-  });
+async function callLLM(prompt: string): Promise<{ success: boolean; response?: string; error?: string }> {
+  try {
+    console.log("[LLM] Calling gateway at:", GATEWAY_URL);
+    
+    const response = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GATEWAY_TOKEN}`,
+      },
+      body: JSON.stringify({
+        model: "default",
+        messages: [
+          { role: "system", content: "You are a helpful assistant." },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 2000,
+        temperature: 0.3,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    console.log("[LLM] Response status:", response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[LLM] Error response:", errorText);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    console.log("[LLM] Response data:", JSON.stringify(data, null, 2));
+    
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      return { success: false, error: "No content in response" };
+    }
+    
+    return { success: true, response: content };
+  } catch (err) {
+    console.error("[LLM] Exception:", err);
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "No response from LLM";
 }
 
 async function executeCleaning(workspacePath: string, files: string[]) {
@@ -164,22 +182,19 @@ export async function POST(request: NextRequest) {
 
     const prompt = CLEAN_WORKSPACE_PROMPT.replace("{{ROOT_FILES_LIST}}", rootFiles.join("\n"));
 
-    let llmResponse: string;
-    try {
-      llmResponse = await callLLM(prompt);
-    } catch (err) {
-      const result = await executeCleaning(workspacePath, rootFiles);
+    const llmResult = await callLLM(prompt);
+    const cleaningResult = await executeCleaning(workspacePath, rootFiles);
+
+    if (!llmResult.success) {
       return NextResponse.json({ 
-        llmResponse: `Modo automático: ${result.summary}`,
-        executed: result
+        llmResponse: `Error LLM: ${llmResult.error}\n\nModo automático: ${cleaningResult.summary}`,
+        executed: cleaningResult
       });
     }
 
-    const result = await executeCleaning(workspacePath, rootFiles);
-
     return NextResponse.json({ 
-      llmResponse,
-      executed: result
+      llmResponse: llmResult.response,
+      executed: cleaningResult
     });
   } catch (err) {
     return NextResponse.json({ 
