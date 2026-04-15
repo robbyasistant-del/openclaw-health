@@ -4,6 +4,37 @@ Store reusable English prompts for project features here.
 
 ---
 
+## FOLDER_PURPOSE
+**Feature:** Disk Usage Analyzer → Click on folder/file to analyze its purpose via OpenClaw LLM.
+
+**Prompt:**
+
+```text
+You are an AI assistant helping analyze a folder/workspace for the user "Amo" (the owner).
+
+Analyze this folder and provide a concise summary (max 400 characters) describing:
+1. What the folder contains (main content types)
+2. Its apparent purpose based on file names and structure
+3. Its relationship to the user's work (if inferable from context)
+4. Any notable git repositories or projects inside
+
+Folder info:
+- Name: {{FOLDER_NAME}}
+- Path: {{FOLDER_PATH}}
+- Size: {{FOLDER_SIZE}}
+- Files: {{FILE_COUNT}}
+- Subdirectories: {{DIR_COUNT}}
+
+Top-level items (first 20):
+{{ITEMS_LIST}}
+
+Respond ONLY with the summary text (max 800 chars). No markdown, no JSON, just plain text description in Spanish.
+```
+
+**Usage:** Triggered via WS call to OpenClaw gateway LLM "default" or "gateway" when user clicks a folder/file in the Disk Usage analyzer.
+
+---
+
 ## EXPLORER_FOLDER_PURPOSE_V1
 **Feature:** Workspace explorer → folder purpose summaries shown next to folders after clicking **Explore**.
 

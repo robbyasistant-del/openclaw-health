@@ -28,6 +28,9 @@ export interface ScanData {
   totalSize: number;
   totalSizeFormatted: string;
   itemCount: number;
+  fileCount?: number;
+  dirCount?: number;
+  truncated?: boolean;
   items: ScanItem[];
   scanTimeMs?: number;
 }
@@ -296,19 +299,38 @@ export function DiskUsageAnalyzer({ data, onSelect }: DiskUsageAnalyzerProps) {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        {data.truncated && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 mb-3">
+            <p className="text-xs text-amber-400">
+              ⚠️ Mostrando los {data.items.length} items más grandes. El escaneo completo encontró {data.itemCount.toLocaleString()} items totales.
+            </p>
+          </div>
+        )}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div className="bg-zinc-800/50 rounded-lg px-3 py-2">
             <p className="text-xs text-zinc-500 uppercase">Tamaño Total</p>
             <p className="text-lg font-semibold text-white">{data.totalSizeFormatted}</p>
           </div>
           <div className="bg-zinc-800/50 rounded-lg px-3 py-2">
-            <p className="text-xs text-zinc-500 uppercase">Items</p>
+            <p className="text-xs text-zinc-500 uppercase">Items Totales</p>
             <p className="text-lg font-semibold text-white">{data.itemCount.toLocaleString()}</p>
+            {(data.fileCount !== undefined || data.dirCount !== undefined) && (
+              <p className="text-[10px] text-zinc-500 mt-0.5">
+                {data.fileCount?.toLocaleString() ?? "-"} archivos, {data.dirCount?.toLocaleString() ?? "-"} carpetas
+              </p>
+            )}
           </div>
           <div className="bg-zinc-800/50 rounded-lg px-3 py-2">
-            <p className="text-xs text-zinc-500 uppercase">Tiempo de Escaneo</p>
+            <p className="text-xs text-zinc-500 uppercase">Mostrando</p>
+            <p className="text-lg font-semibold text-white">{data.items.length}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              {data.truncated ? "(top por tamaño)" : "(todos los items)"}
+            </p>
+          </div>
+          <div className="bg-zinc-800/50 rounded-lg px-3 py-2">
+            <p className="text-xs text-zinc-500 uppercase">Tiempo</p>
             <p className="text-lg font-semibold text-white">
-              {data.scanTimeMs ? `${data.scanTimeMs}ms` : "-"}
+              {data.scanTimeMs ? `${(data.scanTimeMs / 1000).toFixed(1)}s` : "-"}
             </p>
           </div>
         </div>

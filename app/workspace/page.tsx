@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Bot, Check, AlertCircle, Loader2, ChevronRight, ChevronDown, Folder, FileText, Scan, Copy, HardDrive } from "lucide-react";
-import { DiskUsageAnalyzer, type ScanData } from "@/components/disk-usage-analyzer";
+import { DiskUsageLazy } from "@/components/disk-usage-lazy";
 
 interface Agent {
   id: string;
@@ -179,33 +179,10 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleScan = async () => {
+  const handleScan = () => {
     if (!selectedAgent?.workspace) return;
-    
     setScanOpen(true);
-    setIsScanning(true);
     setScanError(null);
-    setScanData(null);
-    
-    try {
-      const response = await fetch("/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: selectedAgent.workspace }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || "Error al escanear el directorio");
-      }
-      
-      setScanData(data);
-    } catch (err) {
-      setScanError(err instanceof Error ? err.message : "Error desconocido");
-    } finally {
-      setIsScanning(false);
-    }
   };
 
   const handleCopyPath = (path: string) => {
@@ -387,44 +364,11 @@ export default function WorkspacePage() {
                         <div className="flex gap-2 shrink-0">
                           <button
                             type="button"
-                            onClick={() => handleCopyPath(selectedAgent.workspace!)}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 px-3 py-2 text-sm font-medium text-zinc-200 transition"
-                            title="Copiar path"
-                          >
-                            <Copy className="h-4 w-4" />
-                            <span className="hidden sm:inline">Copiar</span>
-                          </button>
-                          
-                          <button
-                            type="button"
-                            onClick={handleExplore}
-                            className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                              exploreOpen
-                                ? "bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
-                                : "bg-emerald-600 hover:bg-emerald-500 text-white"
-                            }`}
-                          >
-                            <Folder className="h-4 w-4" />
-                            {exploreOpen ? "Cerrar explorador" : "Explorar"}
-                          </button>
-                          
-                          <button
-                            type="button"
                             onClick={handleScan}
-                            disabled={isScanning}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-3 py-2 text-sm font-medium text-white transition"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-500 px-3 py-2 text-sm font-medium text-white transition"
                           >
-                            {isScanning ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>Escaneando...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Scan className="h-4 w-4" />
-                                <span>Escanear</span>
-                              </>
-                            )}
+                            <Scan className="h-4 w-4" />
+                            <span>Escanear</span>
                           </button>
                         </div>
                       </div>
@@ -471,39 +415,12 @@ export default function WorkspacePage() {
                       </div>
                     )}
 
-                    {/* Disk Usage Analyzer - WinDirStat Style */}
-                    {scanOpen && (
-                      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                        <h4 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                          <Scan className="h-4 w-4 text-amber-400" />
-                          Análisis de Uso de Disco
-                        </h4>
-                        
-                        {isScanning && (
-                          <div className="flex items-center justify-center gap-2 py-8 text-zinc-400">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            <span>Analizando directorio... esto puede tomar un momento</span>
-                          </div>
-                        )}
-                        
-                        {scanError && (
-                          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                            <div className="flex items-center gap-2">
-                              <AlertCircle className="h-4 w-4" />
-                              <span>{scanError}</span>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {!isScanning && !scanError && scanData && (
-                          <DiskUsageAnalyzer 
-                            data={scanData} 
-                            onSelect={(paths) => {
-                              console.log("[Workspace] Selected paths:", paths);
-                            }}
-                          />
-                        )}
-                      </div>
+                    {/* Disk Usage Lazy - ESCANEO POR NIVELES */}
+                    {scanOpen && selectedAgent.workspace && (
+                      <DiskUsageLazy 
+                        targetPath={selectedAgent.workspace}
+                        onClose={() => setScanOpen(false)}
+                      />
                     )}
                   </div>
                 )}
