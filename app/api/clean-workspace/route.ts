@@ -77,55 +77,37 @@ const ALLOWED_ROOT_FILES = new Set([
   ".editorconfig", ".prettierrc", ".eslintrc", ".eslintrc.json",
 ]);
 
-// Llamar al LLM vía gateway de OpenClaw usando HTTP
+// Llamar al LLM vía HTTP - usa el mismo endpoint que analyze-folder
 async function callLLM(prompt: string): Promise<string> {
-  // Intentar endpoint del gateway OpenClaw
   const endpoints = [
-    { url: "http://localhost:18789/v1/chat/completions", auth: null }, // Gateway OpenClaw
-    { url: "http://localhost:8080/api/llm", auth: null },
-    { url: "http://localhost:3000/api/llm", auth: null },
+    "http://localhost:8080/api/llm",
+    "http://127.0.0.1:8080/api/llm",
   ];
 
   for (const endpoint of endpoints) {
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      
-      // Si es el gateway de OpenClaw, usar el token de auth
-      if (endpoint.url.includes("18789")) {
-        headers["Authorization"] = "Bearer 3e5d3201a70ba8d18492d4f8a2d20b830d8b10620864ddc7";
-      }
-
-      const response = await fetch(endpoint.url, {
+      const response = await fetch(endpoint, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          prompt,
           model: "default",
-          messages: [
-            { role: "system", content: "You are a helpful assistant that cleans and organizes workspaces." },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: 2000,
+          max_tokens: 1000,
           temperature: 0.3,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Extraer respuesta del formato OpenAI
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-          return data.choices[0].message.content;
-        }
         return data.response || data.content || data.text || "No se pudo obtener respuesta del LLM.";
       }
     } catch (err) {
-      console.error(`Error con endpoint ${endpoint.url}:`, err);
+      console.error(`Error con endpoint ${endpoint}:`, err);
       continue;
     }
   }
 
-  throw new Error("No se pudo conectar con ningún LLM endpoint");
+  throw new Error("No se pudo conectar con el LLM");
 }
 
 // Ejecutar limpieza basada en análisis automático
@@ -137,7 +119,6 @@ async function executeCleaning(workspacePath: string, files: string[]): Promise<
   for (const file of files) {
     const lowerFile = file.toLowerCase();
     
-    // Saltar archivos permitidos
     if (ALLOWED_ROOT_FILES.has(lowerFile)) {
       continue;
     }
@@ -146,7 +127,6 @@ async function executeCleaning(workspacePath: string, files: string[]): Promise<
     let targetDir: string | null = null;
     let shouldDelete = false;
     
-    // Determinar acción por extensión
     if (/\.(js|ts|py|sh|ps1|bat)$/i.test(file)) {
       targetDir = "scripts";
     } else if (/\.(txt|pdf|docx?)$/i.test(file)) {
@@ -166,11 +146,7 @@ async function executeCleaning(workspacePath: string, files: string[]): Promise<
       } else if (targetDir) {
         const targetDirPath = path.join(workspacePath, targetDir);
         const targetPath = path.join(targetDirPath, file);
-
-        // Crear directorio destino si no existe
         await fs.mkdir(targetDirPath, { recursive: true });
-        
-        // Mover archivo
         await fs.rename(sourcePath, targetPath);
         moved.push(`${file} → ${targetDir}/`);
       }
@@ -180,17 +156,10 @@ async function executeCleaning(workspacePath: string, files: string[]): Promise<
     }
   }
 
-  // Generar resumen
   const parts: string[] = [];
-  if (moved.length > 0) {
-    parts.push(`Movidos ${moved.length} archivos`);
-  }
-  if (deleted.length > 0) {
-    parts.push(`Eliminados ${deleted.length} archivos`);
-  }
-  if (errors.length > 0) {
-    parts.push(`${errors.length} errores`);
-  }
+  if (moved.length > 0) parts.push(`Movidos ${moved.length} archivos`);
+  if (deleted.length > 0) parts.push(`Eliminados ${deleted.length} archivos`);
+  if (errors.length > 0) parts.push(`${errors.length} errores`);
   
   const summary = parts.length > 0 ? parts.join(". ") + "." : "No se realizaron cambios.";
 
@@ -210,7 +179,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Path no permitido" }, { status: 403 });
     }
 
-    // Obtener archivos en la raíz
     const rootFiles = await getRootFiles(workspacePath);
     
     if (rootFiles.length === 0) {
@@ -220,23 +188,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Construir prompt completo
     const prompt = CLEAN_WORKSPACE_PROMPT.replace("{{ROOT_FILES_LIST}}", rootFiles.join("\n"));
 
-    // Llamar al LLM
     let llmResponse: string;
     try {
       llmResponse = await callLLM(prompt);
     } catch (err) {
-      // Si el LLM falla, hacer limpieza automática
       const result = await executeCleaning(workspacePath, rootFiles);
       return NextResponse.json({ 
-        llmResponse: `Modo automático (LLM no disponible):\n${result.summary}\n\nArchivos movidos:\n${result.moved.join("\n") || "Ninguno"}`,
+        llmResponse: `Modo automático (LLM no disponible):\n${result.summary}`,
         executed: result
       });
     }
 
-    // Ejecutar la limpieza automáticamente
     const result = await executeCleaning(workspacePath, rootFiles);
 
     return NextResponse.json({ 
