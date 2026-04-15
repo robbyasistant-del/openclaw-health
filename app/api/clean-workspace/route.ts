@@ -59,15 +59,9 @@ async function getRootFiles(folderPath: string): Promise<string[]> {
 }
 
 const ALLOWED_ROOT_FILES = new Set([
+  // Solo archivos .md de configuración del agente
   "memory.md", "soul.md", "user.md", "identity.md", "tools.md", "agents.md", 
   "heartbeat.md", "bootstrap.md", "readme.md", "prompts.md",
-  "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-  "tsconfig.json", "jsconfig.json", ".gitignore", ".env", ".env.local",
-  "next.config.js", "next.config.ts", "next.config.mjs",
-  "tailwind.config.js", "tailwind.config.ts",
-  "vite.config.js", "vite.config.ts",
-  ".gitattributes",
-  "license", "license.md", "changelog.md",
 ]);
 
 async function callLLM(prompt: string): Promise<{ success: boolean; response?: string; error?: string }> {
