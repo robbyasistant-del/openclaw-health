@@ -455,33 +455,35 @@ export default function WorkspacePage() {
                         </span>
                       </div>
                       
-                      <div className="space-y-3">
-                        {/* Limpiar Raiz */}
-                        <div className="flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={handleCleanWorkspace}
-                            disabled={isCleaning}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-3 py-2 text-sm font-medium text-white transition"
-                          >
-                            {isCleaning ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>Analizando...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="h-4 w-4" />
-                                <span>Limpiar Raiz</span>
-                              </>
-                            )}
-                          </button>
-                          
-                          {cleanResult && (
-                            <div className="rounded-lg border border-purple-500/20 bg-purple-500/10 p-3">
-                              <p className="text-xs text-purple-400 mb-1">Resultado del análisis:</p>
-                              <p className="text-sm text-zinc-300 whitespace-pre-wrap">{cleanResult}</p>
-                            </div>
+                      <div className="flex items-start gap-4">
+                        {/* Botón Limpiar Raiz */}
+                        <button
+                          type="button"
+                          onClick={handleCleanWorkspace}
+                          disabled={isCleaning}
+                          className="inline-flex items-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-3 py-2 text-sm font-medium text-white transition shrink-0"
+                        >
+                          {isCleaning ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Analizando...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4" />
+                              <span>Limpiar Raiz</span>
+                            </>
+                          )}
+                        </button>
+                        
+                        {/* Campo de resultado */}
+                        <div className="flex-1 min-h-[40px] rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2">
+                          {isCleaning ? (
+                            <span className="text-sm text-zinc-500">Consultando al LLM...</span>
+                          ) : cleanResult ? (
+                            <span className="text-sm text-zinc-300 whitespace-pre-wrap">{cleanResult}</span>
+                          ) : (
+                            <span className="text-sm text-zinc-600 italic">El resultado del análisis aparecerá aquí</span>
                           )}
                         </div>
                       </div>

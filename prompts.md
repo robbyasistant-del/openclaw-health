@@ -15,12 +15,14 @@ You are an AI assistant helping clean and organize the workspace for the user "A
 TASK: Analyze the workspace root directory and identify loose files (files that are directly in the root, not in subdirectories) that should be moved or organized.
 
 Rules for cleaning:
-1. NEVER delete files - only suggest moves to appropriate subdirectories
+**No ficheros sueltos en workspace/ raíz** — NUNCA escribir ficheros nuevos en `/workspace/` raíz a menos que Amo lo pida explícitamente. Todo fichero debe ir en la subcarpeta correspondiente (`scripts/`, `Product_*/`, `memory/`, etc...). Mantener `/workspace/` limpio y ordenado.
+
+1. NEVER delete files - moves to appropriate subdirectories
 2. Loose scripts (.js, .ts, .py, .sh) → suggest moving to "scripts/" folder
 3. Loose documents (.md, .txt, .pdf) → suggest moving to "docs/" or keeping if they are system files (MEMORY.md, SOUL.md, etc.)
 4. Loose images/media → suggest moving to "assets/" or appropriate project folder
 5. Temporary files (.tmp, .log, .bak) → suggest moving to "temp/" or deleting if safe
-6. Keep these files in root: README.md, .gitignore, package.json, tsconfig.json, and other config files that belong at root level
+6. Keep these files in root: *.md config agent files
 
 Current root files:
 {{ROOT_FILES_LIST}}
@@ -37,8 +39,6 @@ Format as plain text, max 600 characters, in Spanish.
 
 ---
 
-## CLEAN WORKSPACE
-**No ficheros sueltos en workspace/ raíz** — NUNCA escribir ficheros nuevos en `/workspace/` raíz a menos que Amo lo pida explícitamente. Todo fichero debe ir en la subcarpeta correspondiente (`scripts/`, `Product_*/`, `memory/`, etc...). Mantener `/workspace/` limpio y ordenado.
 
 
 ## FOLDER_PURPOSE
