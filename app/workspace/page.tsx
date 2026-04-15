@@ -204,11 +204,37 @@ export default function WorkspacePage() {
       
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || "Error al analizar workspace");
+        throw new Error(err.error || "Error al limpiar workspace");
       }
       
       const data = await response.json();
-      setCleanResult(data.analysis || "Análisis completado.");
+      const result = data.result;
+      
+      // Formatear resultado
+      let output = data.llmSummary || result.summary || "Limpieza completada.";
+      
+      if (result.moved && result.moved.length > 0) {
+        output += "\n\n📁 Archivos movidos:";
+        result.moved.forEach((m: string) => {
+          output += "\n  ✓ " + m;
+        });
+      }
+      
+      if (result.deleted && result.deleted.length > 0) {
+        output += "\n\n🗑️ Archivos eliminados:";
+        result.deleted.forEach((d: string) => {
+          output += "\n  ✓ " + d;
+        });
+      }
+      
+      if (result.errors && result.errors.length > 0) {
+        output += "\n\n⚠️ Errores:";
+        result.errors.forEach((e: string) => {
+          output += "\n  ✗ " + e;
+        });
+      }
+      
+      setCleanResult(output);
     } catch (err) {
       setCleanResult("Error: " + (err instanceof Error ? err.message : "Error desconocido"));
     } finally {
