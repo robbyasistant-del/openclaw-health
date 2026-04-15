@@ -208,34 +208,8 @@ export default function WorkspacePage() {
         throw new Error(data.error || "Error al limpiar workspace");
       }
       
-      // Verificar que tenemos un resultado válido
-      const result = data.result || {};
-      
-      // Formatear resultado
-      let output = data.llmSummary || result.summary || "Limpieza completada.";
-      
-      if (result.moved && result.moved.length > 0) {
-        output += "\n\n📁 Archivos movidos:";
-        result.moved.forEach((m: string) => {
-          output += "\n  ✓ " + m;
-        });
-      }
-      
-      if (result.deleted && result.deleted.length > 0) {
-        output += "\n\n🗑️ Archivos eliminados:";
-        result.deleted.forEach((d: string) => {
-          output += "\n  ✓ " + d;
-        });
-      }
-      
-      if (result.errors && result.errors.length > 0) {
-        output += "\n\n⚠️ Errores:";
-        result.errors.forEach((e: string) => {
-          output += "\n  ✗ " + e;
-        });
-      }
-      
-      setCleanResult(output);
+      // Mostrar la respuesta del LLM directamente
+      setCleanResult(data.llmResponse || "No hay respuesta del LLM.");
     } catch (err) {
       setCleanResult("Error: " + (err instanceof Error ? err.message : "Error desconocido"));
     } finally {
