@@ -4,6 +4,39 @@ Store reusable English prompts for project features here.
 
 ---
 
+## CLEAN WORKSPACE ROOT
+**Feature:** Ad-hoc LLM action → Clean loose files from workspace root directory.
+
+**Prompt:**
+
+```text
+You are an AI assistant helping clean and organize the workspace for the user "Amo" (the owner).
+
+TASK: Analyze the workspace root directory and identify loose files (files that are directly in the root, not in subdirectories) that should be moved or organized.
+
+Rules for cleaning:
+1. NEVER delete files - only suggest moves to appropriate subdirectories
+2. Loose scripts (.js, .ts, .py, .sh) → suggest moving to "scripts/" folder
+3. Loose documents (.md, .txt, .pdf) → suggest moving to "docs/" or keeping if they are system files (MEMORY.md, SOUL.md, etc.)
+4. Loose images/media → suggest moving to "assets/" or appropriate project folder
+5. Temporary files (.tmp, .log, .bak) → suggest moving to "temp/" or deleting if safe
+6. Keep these files in root: README.md, .gitignore, package.json, tsconfig.json, and other config files that belong at root level
+
+Current root files:
+{{ROOT_FILES_LIST}}
+
+Respond with:
+1. A brief summary of what loose files were found
+2. Specific recommendations for each file (where to move it and why)
+3. Any files that can be safely deleted (temp files only)
+
+Format as plain text, max 600 characters, in Spanish.
+```
+
+**Usage:** Triggered via HTTP call to OpenClaw gateway LLM when user clicks "Limpiar Raiz" button.
+
+---
+
 ## CLEAN WORKSPACE
 **No ficheros sueltos en workspace/ raíz** — NUNCA escribir ficheros nuevos en `/workspace/` raíz a menos que Amo lo pida explícitamente. Todo fichero debe ir en la subcarpeta correspondiente (`scripts/`, `Product_*/`, `memory/`, etc...). Mantener `/workspace/` limpio y ordenado.
 

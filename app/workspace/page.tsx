@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Bot, Check, AlertCircle, Loader2, ChevronRight, ChevronDown, Folder, FileText, Scan, Copy, HardDrive } from "lucide-react";
+import { Bot, Check, AlertCircle, Loader2, ChevronRight, ChevronDown, Folder, FileText, Scan, Copy, HardDrive, Sparkles } from "lucide-react";
 import { DiskUsageLazy } from "@/components/disk-usage-lazy";
 
 interface Agent {
@@ -95,6 +95,10 @@ export default function WorkspacePage() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  
+  // Clean workspace states
+  const [cleanResult, setCleanResult] = useState<string | null>(null);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   useEffect(() => {
     fetchAgents();
@@ -183,6 +187,33 @@ export default function WorkspacePage() {
     if (!selectedAgent?.workspace) return;
     setScanOpen(true);
     setScanError(null);
+  };
+
+  const handleCleanWorkspace = async () => {
+    if (!selectedAgent?.workspace) return;
+    
+    setIsCleaning(true);
+    setCleanResult(null);
+    
+    try {
+      const response = await fetch("/api/clean-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedAgent.workspace }),
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Error al analizar workspace");
+      }
+      
+      const data = await response.json();
+      setCleanResult(data.analysis || "Análisis completado.");
+    } catch (err) {
+      setCleanResult("Error: " + (err instanceof Error ? err.message : "Error desconocido"));
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   const handleCopyPath = (path: string) => {
@@ -414,6 +445,47 @@ export default function WorkspacePage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Funcionalidades Ad-hoc LLM */}
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="h-4 w-4 text-purple-500" />
+                        <span className="text-xs font-medium uppercase tracking-wide text-purple-400">
+                          Funcionalidades LLM
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {/* Limpiar Raiz */}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCleanWorkspace}
+                            disabled={isCleaning}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-3 py-2 text-sm font-medium text-white transition"
+                          >
+                            {isCleaning ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Analizando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4" />
+                                <span>Limpiar Raiz</span>
+                              </>
+                            )}
+                          </button>
+                          
+                          {cleanResult && (
+                            <div className="rounded-lg border border-purple-500/20 bg-purple-500/10 p-3">
+                              <p className="text-xs text-purple-400 mb-1">Resultado del análisis:</p>
+                              <p className="text-sm text-zinc-300 whitespace-pre-wrap">{cleanResult}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Disk Usage Lazy - ESCANEO POR NIVELES */}
                     {scanOpen && selectedAgent.workspace && (
