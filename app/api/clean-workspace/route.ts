@@ -2,28 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 
-// CLEAN WORKSPACE ROOT prompt
-const CLEAN_WORKSPACE_PROMPT = `You are an AI assistant helping clean and organize the workspace for the user "Amo" (the owner).
+// CLEAN WORKSPACE ROOT prompt - se envía literalmente al LLM
+const CLEAN_WORKSPACE_PROMPT = `## CLEAN WORKSPACE ROOT
 
-TASK: Analyze the workspace root directory and identify loose files (files that are directly in the root, not in subdirectories) that should be moved or organized.
+You are an AI assistant helping clean and organize the workspace root for the user "Amo" (the owner).
 
-Rules for cleaning:
-1. NEVER delete files - only suggest moves to appropriate subdirectories
-2. Loose scripts (.js, .ts, .py, .sh) → suggest moving to "scripts/" folder
-3. Loose documents (.md, .txt, .pdf) → suggest moving to "docs/" or keeping if they are system files (MEMORY.md, SOUL.md, etc.)
-4. Loose images/media → suggest moving to "assets/" or appropriate project folder
-5. Temporary files (.tmp, .log, .bak) → suggest moving to "temp/" or deleting if safe
-6. Keep these files in root: README.md, .gitignore, package.json, tsconfig.json, and other config files that belong at root level
+CRITICAL RULES:
+1. ONLY these files are allowed in root:
+   - .md files: MEMORY.md, SOUL.md, USER.md, IDENTITY.md, TOOLS.md, AGENTS.md, HEARTBEAT.md, BOOTSTRAP.md, README.md, prompts.md
+   - Config files: package.json, tsconfig.json, .gitignore, .env, next.config.*, tailwind.config.*, etc.
+2. ALL other loose files MUST be moved to subdirectories
+3. NEVER delete files - only move them to appropriate folders
+4. Create target folders if needed: scripts/, docs/, assets/, temp/, misc/
+
+TASK: Analyze the workspace root and execute the cleaning actions.
 
 Current root files:
 {{ROOT_FILES_LIST}}
 
-Respond with:
-1. A brief summary of what loose files were found
-2. Specific recommendations for each file (where to move it and why)
-3. Any files that can be safely deleted (temp files only)
+For each file NOT in the allowed list, determine the action:
+- Scripts (.js, .ts, .py, .sh, .ps1, .bat) → move to "scripts/"
+- Documents (.txt, .pdf, .docx) → move to "docs/"
+- Images/media (.jpg, .png, .gif, .svg, .webp, .ico, .mp4) → move to "assets/"
+- Temp files (.tmp, .log, .bak, .cache) → move to "temp/" or delete
+- Other loose files → move to "misc/"
 
-Format as plain text, max 600 characters, in Spanish.`;
+Execute the moves and report what was done. Be thorough and move ALL files that don't belong in root.
+
+Respond with a detailed summary in Spanish of what files were moved where. Include the count of files moved.`;
 
 interface CleanWorkspaceRequest {
   path: string;
@@ -39,50 +45,156 @@ function isAllowedPath(targetPath: string): boolean {
 }
 
 // Obtener lista de archivos en la raíz del workspace
-async function getRootFiles(folderPath: string): Promise<string> {
+async function getRootFiles(folderPath: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(folderPath, { withFileTypes: true });
-    const files = entries
+    return entries
       .filter(e => e.isFile() && !e.name.startsWith("."))
       .map(e => e.name);
-    return files.join("\n") || "(no loose files)";
   } catch {
-    return "(error reading directory)";
+    return [];
   }
 }
 
-// Llamar al LLM vía HTTP al gateway de OpenClaw
+// Archivos permitidos en la raíz
+const ALLOWED_ROOT_FILES = new Set([
+  "memory.md", "soul.md", "user.md", "identity.md", "tools.md", "agents.md", 
+  "heartbeat.md", "bootstrap.md", "readme.md", "prompts.md",
+  "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+  "tsconfig.json", "jsconfig.json", ".gitignore", ".env", ".env.local",
+  "next.config.js", "next.config.ts", "next.config.mjs",
+  "tailwind.config.js", "tailwind.config.ts",
+  "postcss.config.js", "postcss.config.ts",
+  "vite.config.js", "vite.config.ts",
+  "webpack.config.js", "rollup.config.js",
+  "nodemon.json", "pm2.config.js",
+  ".gitattributes",
+  "license", "license.md", "license.txt",
+  "changelog.md", "changelog.txt",
+  "contributing.md",
+  "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+  ".nvmrc", ".node-version",
+  ".editorconfig", ".prettierrc", ".eslintrc", ".eslintrc.json",
+]);
+
+// Llamar al LLM vía gateway de OpenClaw usando HTTP
 async function callLLM(prompt: string): Promise<string> {
-  // Intentar varios endpoints del gateway
+  // Intentar endpoint del gateway OpenClaw
   const endpoints = [
-    "http://localhost:8080/api/llm",
-    "http://localhost:3000/api/llm",
-    "http://127.0.0.1:8080/api/llm",
+    { url: "http://localhost:18789/v1/chat/completions", auth: null }, // Gateway OpenClaw
+    { url: "http://localhost:8080/api/llm", auth: null },
+    { url: "http://localhost:3000/api/llm", auth: null },
   ];
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      
+      // Si es el gateway de OpenClaw, usar el token de auth
+      if (endpoint.url.includes("18789")) {
+        headers["Authorization"] = "Bearer 3e5d3201a70ba8d18492d4f8a2d20b830d8b10620864ddc7";
+      }
+
+      const response = await fetch(endpoint.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
-          prompt,
           model: "default",
-          max_tokens: 800,
-          temperature: 0.5,
+          messages: [
+            { role: "system", content: "You are a helpful assistant that cleans and organizes workspaces." },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 2000,
+          temperature: 0.3,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        return data.response || data.content || data.text || "No se pudo analizar.";
+        // Extraer respuesta del formato OpenAI
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+          return data.choices[0].message.content;
+        }
+        return data.response || data.content || data.text || "No se pudo obtener respuesta del LLM.";
       }
-    } catch {
+    } catch (err) {
+      console.error(`Error con endpoint ${endpoint.url}:`, err);
       continue;
     }
   }
 
-  throw new Error("No LLM endpoint available");
+  throw new Error("No se pudo conectar con ningún LLM endpoint");
+}
+
+// Ejecutar limpieza basada en análisis automático
+async function executeCleaning(workspacePath: string, files: string[]): Promise<{ moved: string[]; deleted: string[]; errors: string[]; summary: string }> {
+  const moved: string[] = [];
+  const deleted: string[] = [];
+  const errors: string[] = [];
+
+  for (const file of files) {
+    const lowerFile = file.toLowerCase();
+    
+    // Saltar archivos permitidos
+    if (ALLOWED_ROOT_FILES.has(lowerFile)) {
+      continue;
+    }
+    
+    const sourcePath = path.join(workspacePath, file);
+    let targetDir: string | null = null;
+    let shouldDelete = false;
+    
+    // Determinar acción por extensión
+    if (/\.(js|ts|py|sh|ps1|bat)$/i.test(file)) {
+      targetDir = "scripts";
+    } else if (/\.(txt|pdf|docx?)$/i.test(file)) {
+      targetDir = "docs";
+    } else if (/\.(jpg|jpeg|png|gif|svg|webp|ico|mp4|mov|avi)$/i.test(file)) {
+      targetDir = "assets";
+    } else if (/\.(tmp|log|bak|cache|old|orig)$/i.test(file)) {
+      shouldDelete = true;
+    } else {
+      targetDir = "misc";
+    }
+
+    try {
+      if (shouldDelete) {
+        await fs.unlink(sourcePath);
+        deleted.push(file);
+      } else if (targetDir) {
+        const targetDirPath = path.join(workspacePath, targetDir);
+        const targetPath = path.join(targetDirPath, file);
+
+        // Crear directorio destino si no existe
+        await fs.mkdir(targetDirPath, { recursive: true });
+        
+        // Mover archivo
+        await fs.rename(sourcePath, targetPath);
+        moved.push(`${file} → ${targetDir}/`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${file}: ${message}`);
+    }
+  }
+
+  // Generar resumen
+  const parts: string[] = [];
+  if (moved.length > 0) {
+    parts.push(`Movidos ${moved.length} archivos`);
+  }
+  if (deleted.length > 0) {
+    parts.push(`Eliminados ${deleted.length} archivos`);
+  }
+  if (errors.length > 0) {
+    parts.push(`${errors.length} errores`);
+  }
+  
+  const summary = parts.length > 0 ? parts.join(". ") + "." : "No se realizaron cambios.";
+
+  return { moved, deleted, errors, summary };
 }
 
 export async function POST(request: NextRequest) {
@@ -98,69 +210,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Path no permitido" }, { status: 403 });
     }
 
-    // Obtener archivos sueltos en la raíz
+    // Obtener archivos en la raíz
     const rootFiles = await getRootFiles(workspacePath);
-
-    // Construir prompt
-    const prompt = CLEAN_WORKSPACE_PROMPT.replace("{{ROOT_FILES_LIST}}", rootFiles);
-
-    // Intentar llamar al LLM
-    let analysis: string;
-    try {
-      analysis = await callLLM(prompt);
-      analysis = analysis.trim();
-      if (analysis.length > 600) {
-        analysis = analysis.slice(0, 597) + "...";
-      }
-    } catch {
-      // Fallback: análisis básico
-      analysis = generateBasicCleaningAdvice(rootFiles);
+    
+    if (rootFiles.length === 0) {
+      return NextResponse.json({ 
+        llmResponse: "El workspace está vacío. No hay archivos que organizar.",
+        executed: { moved: [], deleted: [], errors: [], summary: "Workspace vacío." }
+      });
     }
 
-    return NextResponse.json({ analysis, files: rootFiles.split("\n").filter(f => f !== "(no loose files)" && f !== "(error reading directory)") });
+    // Construir prompt completo
+    const prompt = CLEAN_WORKSPACE_PROMPT.replace("{{ROOT_FILES_LIST}}", rootFiles.join("\n"));
+
+    // Llamar al LLM
+    let llmResponse: string;
+    try {
+      llmResponse = await callLLM(prompt);
+    } catch (err) {
+      // Si el LLM falla, hacer limpieza automática
+      const result = await executeCleaning(workspacePath, rootFiles);
+      return NextResponse.json({ 
+        llmResponse: `Modo automático (LLM no disponible):\n${result.summary}\n\nArchivos movidos:\n${result.moved.join("\n") || "Ninguno"}`,
+        executed: result
+      });
+    }
+
+    // Ejecutar la limpieza automáticamente
+    const result = await executeCleaning(workspacePath, rootFiles);
+
+    return NextResponse.json({ 
+      llmResponse: llmResponse,
+      executed: result
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-// Análisis básico cuando el LLM no está disponible
-function generateBasicCleaningAdvice(filesList: string): string {
-  const files = filesList.split("\n").filter(f => f && !f.startsWith("("));
-  
-  if (files.length === 0) {
-    return "No se encontraron archivos sueltos en la raíz del workspace. ¡Todo está ordenado!";
-  }
-
-  const scripts = files.filter(f => /\.(js|ts|py|sh|ps1)$/i.test(f));
-  const docs = files.filter(f => /\.(md|txt|pdf|docx?)$/i.test(f));
-  const images = files.filter(f => /\.(jpg|jpeg|png|gif|svg|webp|ico)$/i.test(f));
-  const configs = files.filter(f => /^(package\.json|tsconfig|README|\.gitignore|\.env|next\.config|tailwind)/i.test(f));
-  
-  let advice = `Se encontraron ${files.length} archivos sueltos en la raíz:\n\n`;
-  
-  if (scripts.length > 0) {
-    advice += `📜 Scripts (${scripts.length}): ${scripts.join(", ")}\n→ Mover a carpeta "scripts/"\n\n`;
-  }
-  
-  if (docs.length > 0) {
-    const systemDocs = docs.filter(f => /^(MEMORY|SOUL|USER|IDENTITY|TOOLS|AGENTS|README)\.md$/i.test(f));
-    const otherDocs = docs.filter(f => !systemDocs.includes(f));
-    if (otherDocs.length > 0) {
-      advice += `📄 Documentos (${otherDocs.length}): ${otherDocs.join(", ")}\n→ Mover a carpeta "docs/"\n\n`;
-    }
-    if (systemDocs.length > 0) {
-      advice += `✅ Archivos de sistema: ${systemDocs.join(", ")}\n→ Mantener en raíz\n\n`;
-    }
-  }
-  
-  if (images.length > 0) {
-    advice += `🖼️ Imágenes (${images.length}): ${images.join(", ")}\n→ Mover a carpeta "assets/" o proyecto correspondiente\n\n`;
-  }
-  
-  if (configs.length > 0) {
-    advice += `⚙️ Configuraciones: ${configs.join(", ")}\n→ Mantener en raíz (archivos de configuración)`;
-  }
-  
-  return advice;
 }
