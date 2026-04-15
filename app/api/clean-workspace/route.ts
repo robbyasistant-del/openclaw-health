@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 
-// CLEAN WORKSPACE ROOT prompt
+// CLEAN WORKSPACE ROOT prompt - devuelve JSON estructurado
 const CLEAN_WORKSPACE_PROMPT = `## CLEAN WORKSPACE ROOT
 
 You are an AI assistant helping clean and organize the workspace root for the user "Amo" (the owner).
@@ -10,32 +10,47 @@ You are an AI assistant helping clean and organize the workspace root for the us
 CRITICAL RULES:
 1. ONLY these files are allowed in root:
    - .md files: MEMORY.md, SOUL.md, USER.md, IDENTITY.md, TOOLS.md, AGENTS.md, HEARTBEAT.md, BOOTSTRAP.md, README.md, prompts.md
-   - Config files: package.json, tsconfig.json, .gitignore, .env, next.config.*, tailwind.config.*, etc.
 2. ALL other loose files MUST be moved to subdirectories
 3. NEVER delete files - only move them to appropriate folders
 4. Create target folders if needed: scripts/, docs/, assets/, temp/, misc/
 
-TASK: Analyze the workspace root and execute the cleaning actions.
+TASK: Analyze the workspace root and return a JSON with the actions to execute.
 
 Current root files:
 {{ROOT_FILES_LIST}}
 
-For each file NOT in the allowed list, determine the action:
+For each file NOT in the allowed list (.md files only), determine the action:
 - Scripts (.js, .ts, .py, .sh, .ps1, .bat) → move to "scripts/"
 - Documents (.txt, .pdf, .docx) → move to "docs/"
 - Images/media (.jpg, .png, .gif, .svg, .webp, .ico, .mp4) → move to "assets/"
 - Temp files (.tmp, .log, .bak, .cache) → move to "temp/" or delete
+- Config files (.json, .config.*, .ignore, .env*, etc.) → move to "config/"
 - Other loose files → move to "misc/"
 
-Execute the moves and report what was done. Be thorough and move ALL files that don't belong in root.
+Respond ONLY with valid JSON in this exact format:
+{
+  "analysis": "brief summary in Spanish of what was found",
+  "actions": [
+    {"action": "move", "file": "filename.js", "to": "scripts/"},
+    {"action": "move", "file": "notes.txt", "to": "docs/"},
+    {"action": "delete", "file": "temp.tmp"}
+  ]
+}
 
-Respond with a detailed summary in Spanish of what files were moved where. Include the count of files moved.`;
+If no actions needed (only .md files present), return:
+{"actions": [], "analysis": "Workspace limpio. Solo hay archivos .md permitidos en la raíz."}`;
 
 const GATEWAY_URL = "http://localhost:18789/v1/chat/completions";
 const GATEWAY_TOKEN = "3e5d3201a70ba8d18492d4f8a2d20b830d8b10620864ddc7";
 
 interface CleanWorkspaceRequest {
   path: string;
+}
+
+interface LLMAction {
+  action: "move" | "delete";
+  file: string;
+  to?: string;
 }
 
 function isAllowedPath(targetPath: string): boolean {
@@ -58,16 +73,8 @@ async function getRootFiles(folderPath: string): Promise<string[]> {
   }
 }
 
-const ALLOWED_ROOT_FILES = new Set([
-  // Solo archivos .md de configuración del agente
-  "memory.md", "soul.md", "user.md", "identity.md", "tools.md", "agents.md", 
-  "heartbeat.md", "bootstrap.md", "readme.md", "prompts.md",
-]);
-
-async function callLLM(prompt: string): Promise<{ success: boolean; response?: string; error?: string }> {
+async function callLLM(prompt: string): Promise<{ success: boolean; analysis?: string; actions?: LLMAction[]; error?: string }> {
   try {
-    console.log("[LLM] Calling gateway at:", GATEWAY_URL);
-    
     const response = await fetch(GATEWAY_URL, {
       method: "POST",
       headers: {
@@ -77,7 +84,7 @@ async function callLLM(prompt: string): Promise<{ success: boolean; response?: s
       body: JSON.stringify({
         model: "openclaw",
         messages: [
-          { role: "system", content: "You are a helpful assistant." },
+          { role: "system", content: "You are a helpful assistant. Respond only with valid JSON." },
           { role: "user", content: prompt }
         ],
         max_tokens: 2000,
@@ -85,61 +92,54 @@ async function callLLM(prompt: string): Promise<{ success: boolean; response?: s
       }),
     });
 
-    console.log("[LLM] Response status:", response.status);
-
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[LLM] Error response:", errorText);
-      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+      return { success: false, error: `HTTP ${response.status}: ${await response.text()}` };
     }
 
     const data = await response.json();
-    console.log("[LLM] Response data:", JSON.stringify(data, null, 2));
-    
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
       return { success: false, error: "No content in response" };
     }
-    
-    return { success: true, response: content };
+
+    // Parsear JSON de la respuesta
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { success: false, error: "No JSON found in response" };
+    }
+
+    const result = JSON.parse(jsonMatch[0]);
+    return { 
+      success: true, 
+      analysis: result.analysis || "Análisis completado.",
+      actions: result.actions || []
+    };
   } catch (err) {
-    console.error("[LLM] Exception:", err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
-async function executeCleaning(workspacePath: string, files: string[]) {
+async function executeActions(workspacePath: string, actions: LLMAction[]) {
   const moved: string[] = [];
   const deleted: string[] = [];
   const errors: string[] = [];
 
-  for (const file of files) {
-    const lowerFile = file.toLowerCase();
-    if (ALLOWED_ROOT_FILES.has(lowerFile)) continue;
+  for (const action of actions) {
+    const sourcePath = path.join(workspacePath, action.file);
     
-    const sourcePath = path.join(workspacePath, file);
-    let targetDir: string | null = null;
-    let shouldDelete = false;
-    
-    if (/\.(js|ts|py|sh|ps1|bat)$/i.test(file)) targetDir = "scripts";
-    else if (/\.(txt|pdf|docx?)$/i.test(file)) targetDir = "docs";
-    else if (/\.(jpg|jpeg|png|gif|svg|webp|ico|mp4)$/i.test(file)) targetDir = "assets";
-    else if (/\.(tmp|log|bak|cache)$/i.test(file)) shouldDelete = true;
-    else targetDir = "misc";
-
     try {
-      if (shouldDelete) {
+      if (action.action === "delete") {
         await fs.unlink(sourcePath);
-        deleted.push(file);
-      } else if (targetDir) {
-        const targetDirPath = path.join(workspacePath, targetDir);
-        const targetPath = path.join(targetDirPath, file);
-        await fs.mkdir(targetDirPath, { recursive: true });
+        deleted.push(action.file);
+      } else if (action.action === "move" && action.to) {
+        const targetDir = path.join(workspacePath, action.to);
+        const targetPath = path.join(targetDir, path.basename(action.file));
+        await fs.mkdir(targetDir, { recursive: true });
         await fs.rename(sourcePath, targetPath);
-        moved.push(`${file} → ${targetDir}/`);
+        moved.push(`${action.file} → ${action.to}`);
       }
     } catch (err) {
-      errors.push(`${file}: ${err instanceof Error ? err.message : String(err)}`);
+      errors.push(`${action.file}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -177,17 +177,19 @@ export async function POST(request: NextRequest) {
     const prompt = CLEAN_WORKSPACE_PROMPT.replace("{{ROOT_FILES_LIST}}", rootFiles.join("\n"));
 
     const llmResult = await callLLM(prompt);
-    const cleaningResult = await executeCleaning(workspacePath, rootFiles);
 
     if (!llmResult.success) {
       return NextResponse.json({ 
-        llmResponse: `Error LLM: ${llmResult.error}\n\nModo automático: ${cleaningResult.summary}`,
-        executed: cleaningResult
+        llmResponse: `Error LLM: ${llmResult.error}`,
+        executed: { moved: [], deleted: [], errors: [], summary: "Error" }
       });
     }
 
+    // Ejecutar las acciones que el LLM decidió
+    const cleaningResult = await executeActions(workspacePath, llmResult.actions || []);
+
     return NextResponse.json({ 
-      llmResponse: llmResult.response,
+      llmResponse: llmResult.analysis,
       executed: cleaningResult
     });
   } catch (err) {
