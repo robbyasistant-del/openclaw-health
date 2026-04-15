@@ -81,7 +81,7 @@ async function callLLM(prompt: string): Promise<{ success: boolean; response?: s
         "Authorization": `Bearer ${GATEWAY_TOKEN}`,
       },
       body: JSON.stringify({
-        model: "default",
+        model: "openclaw",
         messages: [
           { role: "system", content: "You are a helpful assistant." },
           { role: "user", content: prompt }
