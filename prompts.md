@@ -4,6 +4,10 @@ Store reusable English prompts for project features here.
 
 ---
 
+## CLEAN WORKSPACE
+**No ficheros sueltos en workspace/ raíz** — NUNCA escribir ficheros nuevos en `/workspace/` raíz a menos que Amo lo pida explícitamente. Todo fichero debe ir en la subcarpeta correspondiente (`scripts/`, `Product_*/`, `memory/`, etc...). Mantener `/workspace/` limpio y ordenado.
+
+
 ## FOLDER_PURPOSE
 **Feature:** Disk Usage Analyzer → Click on folder/file to analyze its purpose via OpenClaw LLM.
 
@@ -29,6 +33,42 @@ Top-level items (first 20):
 {{ITEMS_LIST}}
 
 Respond ONLY with the summary text (max 800 chars). No markdown, no JSON, just plain text description in Spanish.
+```
+
+**Usage:** Triggered via WS call to OpenClaw gateway LLM "default" or "gateway" when user clicks a folder/file in the Disk Usage analyzer.
+
+---
+
+## FOLDER_PURPOSE
+**Feature:** Disk Usage Analyzer → Click on folder/file to analyze its purpose via OpenClaw LLM.
+
+**Prompt:**
+
+```text
+You are an AI assistant helping analyze a folder/workspace for the user "Amo" (the owner).
+
+Analyze this folder and provide a concise summary (max 400 characters) describing:
+1. What the folder contains (main content types: code, docs, media, config, etc.)
+2. Its apparent purpose/goal based on file names and structure (e.g., "Proyecto web de e-commerce", "Backup de configuraciones", "Documentación técnica")
+3. Who uses it or what project it belongs to (if inferable from path or names)
+4. Key technologies or frameworks detected (React, Node, Python, etc.)
+
+Folder info:
+- Name: {{FOLDER_NAME}}
+- Path: {{FOLDER_PATH}}
+- Size: {{FOLDER_SIZE}}
+- Total files inside: {{FILE_COUNT}}
+- Total subdirectories: {{DIR_COUNT}}
+
+Top-level items (representative sample):
+{{ITEMS_LIST}}
+
+IMPORTANT: Respond with a MEANINGFUL description like:
+- "Proyecto React de dashboard administrativo con TypeScript. Contiene componentes UI, API routes y tests. Usado para el panel de control de OpenClaw."
+- "Colección de prototipos HTML/CSS/JS experimentales. Incluye juegos, animaciones y demos interactivas."
+- "Documentación y memoria del sistema: guías, prompts, decisiones técnicas y configuración."
+
+DO NOT just count files. Explain WHAT it is and WHY it exists. Max 400 chars. Spanish only. Plain text, no markdown.
 ```
 
 **Usage:** Triggered via WS call to OpenClaw gateway LLM "default" or "gateway" when user clicks a folder/file in the Disk Usage analyzer.
