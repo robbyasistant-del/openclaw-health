@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Download, Github, CheckCircle, AlertCircle, Package } from "lucide-react";
+import { RefreshCw, Download, Github, CheckCircle, AlertCircle, Package, Sparkles } from "lucide-react";
 
 interface VersionInfo {
   currentVersion: string;
@@ -16,6 +16,8 @@ export default function UpdatesPage() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisContent, setAnalysisContent] = useState<string>("");
 
   const fetchVersionInfo = async () => {
     setLoading(true);
@@ -37,6 +39,39 @@ export default function UpdatesPage() {
     }
   };
 
+  const analyzeUpdates = async () => {
+    if (!versionInfo) return;
+    
+    setAnalysisLoading(true);
+    setAnalysisContent("");
+    
+    try {
+      const promptText = `Analyze OpenClaw versions between installed version ${versionInfo.currentVersion} and latest version ${versionInfo.latestVersion} from https://github.com/openclaw/openclaw/releases`;
+      
+      const response = await fetch("/api/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptName: "UPDATE OPENCLAW",
+          promptText: promptText,
+          timeout: 300,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Error analyzing updates");
+      }
+      
+      setAnalysisContent(data.response || "No analysis available");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchVersionInfo();
   }, []);
@@ -55,6 +90,26 @@ export default function UpdatesPage() {
     } catch {
       return dateString;
     }
+  };
+
+  // Parse markdown-style content to HTML
+  const parseContent = (content: string) => {
+    if (!content) return "";
+    
+    return content
+      // Convert headers
+      .replace(/### (.*)/g, '<h3 class="text-lg font-semibold text-emerald-400 mt-6 mb-3">$1</h3>')
+      .replace(/## (.*)/g, '<h2 class="text-xl font-bold text-white mt-8 mb-4">$1</h2>')
+      // Convert bold
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-emerald-400">$1</strong>')
+      // Convert italic
+      .replace(/\*(.*?)\*/g, '<em class="text-zinc-300">$1</em>')
+      // Convert bullet points
+      .replace(/^- (.*)/gm, '<li class="ml-4 text-zinc-300 mb-1">$1</li>')
+      // Convert numbered lists
+      .replace(/^(\d+)\. (.*)/gm, '<li class="ml-4 text-zinc-300 mb-1"><span class="text-emerald-500">$1.</span> $2</li>')
+      // Convert newlines to breaks (except within lists)
+      .replace(/\n/g, '<br/>');
   };
 
   return (
@@ -156,15 +211,53 @@ export default function UpdatesPage() {
             </a>
           </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={fetchVersionInfo}
-            disabled={loading}
-            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          {/* Action Buttons */}
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={fetchVersionInfo}
+              disabled={loading}
+              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+            
+            {versionInfo.updateAvailable && (
+              <button
+                onClick={analyzeUpdates}
+                disabled={analysisLoading}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:bg-zinc-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <Sparkles className={`h-4 w-4 ${analysisLoading ? "animate-spin" : ""}`} />
+                {analysisLoading ? "Analyzing..." : "Analyze Updates"}
+              </button>
+            )}
+          </div>
+
+          {/* Analysis Results */}
+          {analysisLoading && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="h-5 w-5 text-emerald-500 animate-spin" />
+                <span className="text-white font-medium">Analyzing version differences...</span>
+              </div>
+              <p className="text-zinc-400 text-sm">This may take a few minutes as we research release notes, GitHub issues, Reddit discussions, and community feedback.</p>
+            </div>
+          )}
+
+          {analysisContent && !analysisLoading && (
+            <div className="bg-zinc-900 border border-emerald-500/30 rounded-lg p-6">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-emerald-500" />
+                Version Analysis Report
+              </h2>
+              
+              <div 
+                className="prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: parseContent(analysisContent) }}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

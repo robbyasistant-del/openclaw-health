@@ -92,7 +92,7 @@ Create a detailed comparison table in HTML format:
 
 Then provide a stability analysis section:
 
-## Stability Analysis
+### Stability Analysis
 
 | Metric | Details |
 |--------|---------|
@@ -101,7 +101,7 @@ Then provide a stability analysis section:
 | **Known Issues in Latest** | [Any critical bugs reported] |
 | **Community Sentiment** | [Positive/Negative/Mixed - with sources] |
 
-## Recommendation
+### Recommendation
 
 **Recommended update to: XXXX.XX.XX**
 
