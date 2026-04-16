@@ -87,12 +87,15 @@ async function callOpenClawGateway(prompt: string, timeout: number): Promise<str
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout * 1000);
   
+  // Token del gateway - desde variables de entorno
+  const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
+  
   try {
     const response = await fetch("http://localhost:18789/v1/chat/completions", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "Authorization": "Bearer openclaw"
+        "Authorization": `Bearer ${GATEWAY_TOKEN}`
       },
       body: JSON.stringify({
         model: "openclaw",
