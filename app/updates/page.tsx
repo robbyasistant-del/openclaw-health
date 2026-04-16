@@ -87,13 +87,14 @@ export default function UpdatesPage() {
     if (!recommendedVersion || !versionInfo) return;
     
     const confirmed = window.confirm(
-      `⚠️ WARNING: You are about to execute OpenClaw update to version ${recommendedVersion}.\n\n` +
+      `⚠️ CRITICAL WARNING: You are about to execute OpenClaw update to version ${recommendedVersion}.\n\n` +
       `This will:\n` +
-      `• Update the OpenClaw package\n` +
-      `• Update all installed skills/plugins\n` +
-      `• RESTART the gateway service\n\n` +
+      `• STOP the OpenClaw Gateway (you will be temporarily disconnected)\n` +
+      `• Update the OpenClaw package via npm\n` +
+      `• RESTART the gateway service (requires manual reconnection)\n\n` +
       `Current version: ${versionInfo.currentVersion}\n` +
       `Target version: ${recommendedVersion}\n\n` +
+      `⚠️ After the gateway restarts, you may need to reconnect manually.\n\n` +
       `Are you sure you want to proceed?`
     );
     
@@ -101,32 +102,38 @@ export default function UpdatesPage() {
     
     setExecuteLoading(true);
     setExecuteResult("");
+    setError("");
     
     try {
+      // Note: 120s timeout - gateway restart will disconnect the agent
       const response = await fetch("/api/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           promptName: "EXECUTE UPDATE OPENCLAW",
           promptText: `Execute the OpenClaw update to version ${recommendedVersion}`,
-          timeout: 600,
+          timeout: 120,
         }),
       });
       
-      const data = await response.json();
-      
+      // If we get here, the gateway might have already restarted
+      // The response might fail due to disconnection
       if (!response.ok) {
-        throw new Error(data.error || "Error executing update");
+        const errorData = await response.json().catch(() => ({ error: "Connection lost - gateway may be restarting" }));
+        throw new Error(errorData.error || "Update in progress or connection lost");
       }
       
-      setExecuteResult(data.response || "Update executed successfully");
+      const data = await response.json();
+      setExecuteResult(data.response || "Update executed. Gateway may be restarting - check status in a few seconds.");
       
-      // Refresh version info after update
-      setTimeout(() => {
-        fetchVersionInfo();
-      }, 5000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Connection error is expected if gateway restarted
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes("fetch") || errorMsg.includes("connection") || errorMsg.includes("timeout")) {
+        setExecuteResult("⚠️ Update command sent. The gateway may be restarting.\n\nPlease wait 10-15 seconds and check:\n1. Gateway status on port 18789\n2. OpenClaw version with 'openclaw --version'\n3. Reconnect to this interface if needed");
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setExecuteLoading(false);
     }

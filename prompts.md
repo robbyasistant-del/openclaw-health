@@ -127,55 +127,74 @@ Include source citations for all information gathered from Reddit, GitHub, docum
 **Feature:** Execute OpenClaw Update to Specific Version
 
 ```text
-Execute the OpenClaw update to version <version> with the following steps:
+Execute the OpenClaw update to version <version> with the following REAL steps:
 
-1. **Pre-update Check:**
-   - Verify current OpenClaw version installed
-   - Check if gateway is running (port 18789)
-   - Verify internet connectivity to GitHub/npm
+**⚠️ WARNING: This process will restart the OpenClaw Gateway, which will temporarily disconnect this agent session.**
 
-2. **Run Update Command:**
-   - Execute: `openclaw update --version <version>` or `npm install -g openclaw@<version>`
-   - Wait for package download and installation
-   - Update all installed skills/plugins with `openclaw skills update --all`
+**REAL Step 1: Pre-update Check**
+- Run `openclaw --version` to confirm current version
+- Run `openclaw gateway status` to check if gateway is running
+- Verify internet connectivity to npm registry
 
-3. **Restart Gateway Service:**
-   - Stop the gateway if running: identify PID on port 18789 and terminate gracefully
-   - Start the gateway: `openclaw gateway start` (in new PowerShell window, NEVER in current session)
-   - Verify gateway is listening on port 18789
-   - Wait 5 seconds for full initialization
+**REAL Step 2: Stop Gateway (REQUIRED before update)**
+- Identify the gateway process on port 18789
+- Execute graceful shutdown: `openclaw gateway stop` (preferred) OR identify PID and terminate
+- Verify port 18789 is free: `netstat -ano | findstr :18789`
+- Wait 3 seconds for complete shutdown
 
-4. **Post-update Verification:**
-   - Check new version: `openclaw --version`
-   - Verify gateway responds to API calls (GET /v1/models or similar health check)
-   - Check all critical skills are loaded
+**REAL Step 3: Update Package**
+- Execute: `npm install -g openclaw@<version>`
+- Wait for download and installation to complete
+- Verify installation: `openclaw --version` (should show new version)
 
-5. **Report Results to Telegram (channel: webchat or configured default):**
-   Message format:
-   ```
-   🔄 OpenClaw Update Complete
-   
-   Previous Version: [old_version]
-   New Version: <version>
-   Gateway Status: ✅ Running / ❌ Failed
-   Skills Updated: [count] plugins updated
-   
-   Details:
-   [Success/Failure message]
-   ```
+**REAL Step 4: Update Skills/Plugins**
+- Run `openclaw skills update --all` (if this command exists)
+- Or manually reinstall critical skills if needed
+- List updated skills
 
-6. **Error Handling:**
-   - If update command fails: Capture exact error message, suggest fix (permissions, network, etc.)
-   - If gateway fails to start: Check logs, report specific error, suggest rollback
-   - If skills fail to load: List which ones, suggest manual reinstall
-   - NEVER silently continue on errors - always report what failed and why
+**REAL Step 5: Restart Gateway (CRITICAL)**
+- Start gateway in NEW PowerShell window: `cmd /c start powershell.exe -NoExit -Command "openclaw gateway start"`
+- Wait 5 seconds for initialization
+- Verify gateway is listening: `netstat -ano | findstr :18789`
+- Test API endpoint: `curl http://localhost:18789/v1/models` or similar
 
-**Important:** 
-- The gateway restart MUST be done in a NEW PowerShell window (never use taskkill on the gateway process in the agent's session)
-- If something fails, stop immediately and report the error with context
-- Include exact command output in the report
+**REAL Step 6: Post-update Verification**
+- Confirm new version: `openclaw --version`
+- Test gateway health: Check if port 18789 responds
+- Verify critical skills are loaded
+- Check gateway logs for any errors
 
-Show final result message confirming update status and current running version.
+**Step 7: Report Results**
+Provide a complete summary:
 ```
+🔄 OpenClaw Update Execution Report
+
+Target Version: <version>
+Previous Version: [old_version]
+New Version: [new_version]
+Gateway Restarted: ✅ Yes / ❌ No
+Gateway Status: ✅ Running on port 18789 / ❌ Failed
+Skills Updated: [count or list]
+
+Execution Log:
+[Step-by-step results with actual command outputs]
+
+Errors (if any):
+[Detailed error messages and suggested fixes]
+```
+
+**IMPORTANT SAFETY RULES:**
+1. NEVER use `taskkill /F /IM node.exe` - this kills ALL node processes including the gateway
+2. ALWAYS use `openclaw gateway stop` or identify the specific PID on port 18789
+3. Gateway MUST restart in a NEW PowerShell window - never in the agent's session
+4. If any step fails, STOP immediately and report the error - do not continue
+5. The agent will be temporarily disconnected during gateway restart - this is expected
+
+**Known Limitations:**
+- The agent cannot automatically restart itself after gateway restart
+- User may need to reconnect manually after the update completes
+- Some skills may require manual reinstallation after major version changes
+
+Show the complete execution log with actual command outputs and final status.
 
 ---
