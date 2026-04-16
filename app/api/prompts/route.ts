@@ -82,19 +82,24 @@ async function findPrompt(name: string): Promise<PromptDefinition | null> {
   return prompts.find(p => p.name.toLowerCase() === name.toLowerCase()) || null;
 }
 
-// Llamar al gateway de OpenClaw
+// Llamar al gateway de OpenClaw usando el endpoint /v1/chat/completions (formato OpenAI compatible)
 async function callOpenClawGateway(prompt: string, timeout: number): Promise<string> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout * 1000);
   
   try {
-    const response = await fetch("http://localhost:18789/api/turn", {
+    const response = await fetch("http://localhost:18789/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": "Bearer openclaw"
+      },
       body: JSON.stringify({
         model: "openclaw",
-        message: prompt,
-        timeoutSeconds: timeout
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 4000
       }),
       signal: controller.signal
     });
@@ -102,17 +107,16 @@ async function callOpenClawGateway(prompt: string, timeout: number): Promise<str
     clearTimeout(timeoutId);
     
     if (!response.ok) {
-      throw new Error(`Gateway error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Gateway error ${response.status}: ${errorText}`);
     }
     
     const data = await response.json();
     
-    // Extraer respuesta de diferentes formatos posibles
-    return data.response?.text || 
-           data.response?.content || 
+    // Extraer respuesta del formato OpenAI
+    return data.choices?.[0]?.message?.content || 
+           data.response?.text || 
            data.text || 
-           data.content || 
-           data.message || 
            JSON.stringify(data);
            
   } catch (err) {
