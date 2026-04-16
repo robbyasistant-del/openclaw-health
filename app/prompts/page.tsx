@@ -22,14 +22,15 @@ export default function PromptsPage() {
     fetch("/api/prompts")
       .then((res) => res.json())
       .then((data) => {
-        if (data.prompts) {
+        if (data.prompts && data.prompts.length > 0) {
           setPrompts(data.prompts);
-          if (data.prompts.length > 0) {
-            setSelectedPrompt(data.prompts[0].name);
-          }
+          setSelectedPrompt(data.prompts[0].name);
         }
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        console.error("Error loading prompts:", err);
+        setError("Error loading prompts: " + err.message);
+      });
   }, []);
 
   // Cargar texto del prompt seleccionado
@@ -43,7 +44,9 @@ export default function PromptsPage() {
           setPromptText(data.prompt.prompt);
         }
       })
-      .catch((err) => setError("Error cargando prompt: " + err.message));
+      .catch((err) => {
+        console.error("Error loading prompt text:", err);
+      });
   }, [selectedPrompt]);
 
   const handleExecute = async () => {
@@ -59,7 +62,7 @@ export default function PromptsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           promptName: selectedPrompt,
-          promptText: promptText,  // Enviamos el texto editable
+          promptText: promptText,
           timeout: timeout,
         }),
       });
@@ -84,16 +87,16 @@ export default function PromptsPage() {
         <Terminal className="h-8 w-8 text-emerald-500" />
         <div>
           <h1 className="text-2xl font-bold text-white">Prompts</h1>
-          <p className="text-zinc-400">Ejecuta prompts definidos en prompts.md vía OpenClaw Gateway</p>
+          <p className="text-zinc-400">Ejecuta prompts definidos en prompts.md via OpenClaw Gateway</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Panel de Configuración */}
+        {/* Panel de Configuracion */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <FileText className="h-5 w-5 text-emerald-500" />
-            Configuración
+            Configuracion
           </h2>
 
           <div className="space-y-4">
@@ -104,8 +107,12 @@ export default function PromptsPage() {
               <select
                 value={selectedPrompt}
                 onChange={(e) => setSelectedPrompt(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                disabled={prompts.length === 0}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
               >
+                {prompts.length === 0 && (
+                  <option value="">Cargando prompts...</option>
+                )}
                 {prompts.map((p) => (
                   <option key={p.name} value={p.name}>
                     {p.name}
@@ -131,7 +138,7 @@ export default function PromptsPage() {
 
             <button
               onClick={handleExecute}
-              disabled={loading || !selectedPrompt}
+              disabled={loading || !selectedPrompt || prompts.length === 0}
               className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
             >
               {loading ? (
@@ -166,7 +173,7 @@ export default function PromptsPage() {
             <textarea
               readOnly
               value={response}
-              placeholder={loading ? "Esperando respuesta del gateway..." : "La respuesta aparecerá aquí después de ejecutar"}
+              placeholder={loading ? "Esperando respuesta..." : "La respuesta aparecera aqui"}
               className="w-full h-64 bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-zinc-300 font-mono text-sm resize-none focus:outline-none"
             />
           </div>
@@ -193,7 +200,7 @@ export default function PromptsPage() {
         </div>
         
         <p className="text-sm text-zinc-400">
-          Selecciona un prompt del combobox arriba y edita el texto aquí. Al pulsar &quot;Ejecutar&quot;, se enviará 
+          Selecciona un prompt arriba y edita el texto aqui. Al pulsar Ejecutar, se enviara 
           <strong className="text-emerald-400"> exactamente este texto</strong> al gateway.
         </p>
 
