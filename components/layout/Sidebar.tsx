@@ -10,6 +10,7 @@ import {
   Briefcase,
   Shield,
   DatabaseBackup,
+  Terminal,
 } from "lucide-react";
 
 const modules = [
@@ -19,6 +20,7 @@ const modules = [
   { name: "Workspace", href: "/workspace", icon: Briefcase },
   { name: "Backups", href: "/backups", icon: DatabaseBackup },
   { name: "Security", href: "/security", icon: Shield },
+  { name: "Prompts", href: "/prompts", icon: Terminal },
   { name: "Config", href: "/config", icon: Settings },
 ];
 
