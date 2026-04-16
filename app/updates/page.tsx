@@ -48,9 +48,12 @@ export default function UpdatesPage() {
     setAnalysisLoading(true);
     setAnalysisContent("");
     setRecommendedVersion("");
+    setError("");
     
     try {
       const promptText = `Analyze OpenClaw versions between installed version ${versionInfo.currentVersion} and latest version ${versionInfo.latestVersion} from https://github.com/openclaw/openclaw/releases`;
+      
+      console.log("Starting analysis...");
       
       const response = await fetch("/api/prompts", {
         method: "POST",
@@ -62,13 +65,18 @@ export default function UpdatesPage() {
         }),
       });
       
+      console.log("Response received:", response.status);
+      
       const data = await response.json();
+      console.log("Data received:", data);
       
       if (!response.ok) {
         throw new Error(data.error || "Error analyzing updates");
       }
       
       const content = data.response || "No analysis available";
+      console.log("Content length:", content.length);
+      
       setAnalysisContent(content);
       
       // Extract recommended version from analysis
@@ -77,7 +85,13 @@ export default function UpdatesPage() {
         setRecommendedVersion(versionMatch[1]);
       }
     } catch (err) {
+      console.error("Analysis error:", err);
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      console.log("Setting analysis loading to false");
+      setAnalysisLoading(false);
+    }
+  };
     } finally {
       setAnalysisLoading(false);
     }
@@ -345,20 +359,34 @@ export default function UpdatesPage() {
                 <span className="text-white font-medium">Analyzing version differences...</span>
               </div>
               <p className="text-zinc-400 text-sm">This may take a few minutes as we research release notes, GitHub issues, Reddit discussions, and community feedback.</p>
+              <p className="text-zinc-500 text-xs mt-2">Timeout: 5 minutes</p>
             </div>
           )}
 
           {analysisContent && !analysisLoading && (
             <div className="bg-zinc-900 border border-emerald-500/30 rounded-lg p-6">
-              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-emerald-500" />
-                Version Analysis Report
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-emerald-500" />
+                  Version Analysis Report
+                </h2>
+                {recommendedVersion && (
+                  <span className="text-sm text-emerald-400 bg-emerald-900/30 px-3 py-1 rounded-full">
+                    Recommended: {recommendedVersion}
+                  </span>
+                )}
+              </div>
               
               <div 
-                className="prose prose-invert max-w-none"
+                className="prose prose-invert max-w-none text-zinc-300"
                 dangerouslySetInnerHTML={{ __html: parseContent(analysisContent) }}
               />
+            </div>
+          )}
+
+          {!analysisLoading && !analysisContent && error && (
+            <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+              <p className="text-red-400">Analysis failed: {error}</p>
             </div>
           )}
 
