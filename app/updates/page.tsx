@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Download, Github, CheckCircle, AlertCircle, Package, Sparkles } from "lucide-react";
+import { RefreshCw, Download, Github, CheckCircle, AlertCircle, Package, Sparkles, Play, AlertTriangle } from "lucide-react";
 
 interface VersionInfo {
   currentVersion: string;
@@ -18,6 +18,9 @@ export default function UpdatesPage() {
   const [error, setError] = useState<string>("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisContent, setAnalysisContent] = useState<string>("");
+  const [recommendedVersion, setRecommendedVersion] = useState<string>("");
+  const [executeLoading, setExecuteLoading] = useState(false);
+  const [executeResult, setExecuteResult] = useState<string>("");
 
   const fetchVersionInfo = async () => {
     setLoading(true);
@@ -44,6 +47,7 @@ export default function UpdatesPage() {
     
     setAnalysisLoading(true);
     setAnalysisContent("");
+    setRecommendedVersion("");
     
     try {
       const promptText = `Analyze OpenClaw versions between installed version ${versionInfo.currentVersion} and latest version ${versionInfo.latestVersion} from https://github.com/openclaw/openclaw/releases`;
@@ -64,11 +68,67 @@ export default function UpdatesPage() {
         throw new Error(data.error || "Error analyzing updates");
       }
       
-      setAnalysisContent(data.response || "No analysis available");
+      const content = data.response || "No analysis available";
+      setAnalysisContent(content);
+      
+      // Extract recommended version from analysis
+      const versionMatch = content.match(/Recommended update to:\s*(v?\d{4}\.\d{1,2}\.\d{1,2})/i);
+      if (versionMatch) {
+        setRecommendedVersion(versionMatch[1]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setAnalysisLoading(false);
+    }
+  };
+
+  const executeUpdate = async () => {
+    if (!recommendedVersion || !versionInfo) return;
+    
+    const confirmed = window.confirm(
+      `⚠️ WARNING: You are about to execute OpenClaw update to version ${recommendedVersion}.\n\n` +
+      `This will:\n` +
+      `• Update the OpenClaw package\n` +
+      `• Update all installed skills/plugins\n` +
+      `• RESTART the gateway service\n\n` +
+      `Current version: ${versionInfo.currentVersion}\n` +
+      `Target version: ${recommendedVersion}\n\n` +
+      `Are you sure you want to proceed?`
+    );
+    
+    if (!confirmed) return;
+    
+    setExecuteLoading(true);
+    setExecuteResult("");
+    
+    try {
+      const response = await fetch("/api/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptName: "EXECUTE UPDATE OPENCLAW",
+          promptText: `Execute the OpenClaw update to version ${recommendedVersion}`,
+          timeout: 600,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Error executing update");
+      }
+      
+      setExecuteResult(data.response || "Update executed successfully");
+      
+      // Refresh version info after update
+      setTimeout(() => {
+        fetchVersionInfo();
+      }, 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExecuteLoading(false);
     }
   };
 
@@ -212,7 +272,7 @@ export default function UpdatesPage() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-3 flex-wrap items-center">
             <button
               onClick={fetchVersionInfo}
               disabled={loading}
@@ -233,6 +293,42 @@ export default function UpdatesPage() {
               </button>
             )}
           </div>
+
+          {/* Execute Update Section - Only show after analysis */}
+          {analysisContent && !analysisLoading && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Execute Update
+              </h3>
+              
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <div className="flex-1 w-full">
+                  <label className="block text-sm text-zinc-400 mb-1">Target Version</label>
+                  <input
+                    type="text"
+                    value={recommendedVersion}
+                    onChange={(e) => setRecommendedVersion(e.target.value)}
+                    placeholder="Version to update to (e.g., v2026.4.14)"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white font-mono focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <button
+                  onClick={executeUpdate}
+                  disabled={executeLoading || !recommendedVersion}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:bg-zinc-700 text-white px-6 py-3 rounded-lg transition-colors font-medium mt-5 sm:mt-0"
+                >
+                  <Play className={`h-4 w-4 ${executeLoading ? "animate-spin" : ""}`} />
+                  {executeLoading ? "Executing..." : "Execute Update"}
+                </button>
+              </div>
+              
+              <p className="text-zinc-500 text-sm mt-3">
+                ⚠️ This will update OpenClaw, all skills/plugins, and restart the gateway service.
+              </p>
+            </div>
+          )}
 
           {/* Analysis Results */}
           {analysisLoading && (
@@ -256,6 +352,19 @@ export default function UpdatesPage() {
                 className="prose prose-invert max-w-none"
                 dangerouslySetInnerHTML={{ __html: parseContent(analysisContent) }}
               />
+            </div>
+          )}
+
+          {/* Execute Result */}
+          {executeResult && (
+            <div className="bg-zinc-900 border border-emerald-500/30 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
+                Update Execution Result
+              </h2>
+              <pre className="bg-zinc-950 rounded-lg p-4 text-zinc-300 font-mono text-sm whitespace-pre-wrap">
+                {executeResult}
+              </pre>
             </div>
           )}
         </div>

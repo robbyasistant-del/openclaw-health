@@ -122,3 +122,60 @@ Include source citations for all information gathered from Reddit, GitHub, docum
 ```
 
 ---
+
+## EXECUTE UPDATE OPENCLAW
+**Feature:** Execute OpenClaw Update to Specific Version
+
+```text
+Execute the OpenClaw update to version <version> with the following steps:
+
+1. **Pre-update Check:**
+   - Verify current OpenClaw version installed
+   - Check if gateway is running (port 18789)
+   - Verify internet connectivity to GitHub/npm
+
+2. **Run Update Command:**
+   - Execute: `openclaw update --version <version>` or `npm install -g openclaw@<version>`
+   - Wait for package download and installation
+   - Update all installed skills/plugins with `openclaw skills update --all`
+
+3. **Restart Gateway Service:**
+   - Stop the gateway if running: identify PID on port 18789 and terminate gracefully
+   - Start the gateway: `openclaw gateway start` (in new PowerShell window, NEVER in current session)
+   - Verify gateway is listening on port 18789
+   - Wait 5 seconds for full initialization
+
+4. **Post-update Verification:**
+   - Check new version: `openclaw --version`
+   - Verify gateway responds to API calls (GET /v1/models or similar health check)
+   - Check all critical skills are loaded
+
+5. **Report Results to Telegram (channel: webchat or configured default):**
+   Message format:
+   ```
+   🔄 OpenClaw Update Complete
+   
+   Previous Version: [old_version]
+   New Version: <version>
+   Gateway Status: ✅ Running / ❌ Failed
+   Skills Updated: [count] plugins updated
+   
+   Details:
+   [Success/Failure message]
+   ```
+
+6. **Error Handling:**
+   - If update command fails: Capture exact error message, suggest fix (permissions, network, etc.)
+   - If gateway fails to start: Check logs, report specific error, suggest rollback
+   - If skills fail to load: List which ones, suggest manual reinstall
+   - NEVER silently continue on errors - always report what failed and why
+
+**Important:** 
+- The gateway restart MUST be done in a NEW PowerShell window (never use taskkill on the gateway process in the agent's session)
+- If something fails, stop immediately and report the error with context
+- Include exact command output in the report
+
+Show final result message confirming update status and current running version.
+```
+
+---
