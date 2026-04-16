@@ -92,10 +92,6 @@ export default function UpdatesPage() {
       setAnalysisLoading(false);
     }
   };
-    } finally {
-      setAnalysisLoading(false);
-    }
-  };
 
   const executeUpdate = async () => {
     if (!recommendedVersion || !versionInfo) return;
