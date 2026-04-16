@@ -35,23 +35,37 @@ async function parsePromptsFile(): Promise<PromptDefinition[]> {
       if (!nameMatch) continue;
       
       const name = nameMatch[1].trim();
+      let promptText = "";
       
-      // Intentar encontrar el prompt en bloque ```text
+      // CASO 1: Prompt en bloque ```text
       const textBlockMatch = trimmed.match(/```text\n([\s\S]*?)```/);
       if (textBlockMatch) {
-        prompts.push({
-          name,
-          prompt: textBlockMatch[1].trim()
-        });
+        promptText = textBlockMatch[1].trim();
       } else {
-        // Si no hay bloque ```text, buscar texto directo después de **Prompt:**
-        const promptMatch = trimmed.match(/\*\*Prompt:\*\*\s*\n?\n?```?\n?([\s\S]*?)(?:\n---|\n\*\*Usage:|\n##\s|$)/);
-        if (promptMatch) {
-          let promptText = promptMatch[1].trim();
-          // Limpiar posible ``` al final
-          promptText = promptText.replace(/```\s*$/, "").trim();
-          prompts.push({ name, prompt: promptText });
+        // CASO 2: Prompt directo después del título (como BACKUP_V1)
+        // Buscar todo el contenido después del título ## hasta el próximo ## o final
+        const lines = trimmed.split('\n');
+        let contentStarted = false;
+        const contentLines: string[] = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          // Ignorar líneas de metadata como **Feature:** hasta encontrar contenido real
+          if (!contentStarted) {
+            if (line.trim() === "" || line.startsWith("**")) continue;
+            contentStarted = true;
+          }
+          contentLines.push(line);
         }
+        
+        if (contentLines.length > 0) {
+          promptText = contentLines.join('\n').trim();
+        }
+      }
+      
+      // Solo agregar si encontramos contenido
+      if (promptText && promptText.length > 50) {
+        prompts.push({ name, prompt: promptText });
       }
     }
     
