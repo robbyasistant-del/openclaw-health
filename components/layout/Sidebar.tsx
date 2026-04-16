@@ -11,6 +11,7 @@ import {
   Shield,
   DatabaseBackup,
   Terminal,
+  Package,
 } from "lucide-react";
 
 const modules = [
@@ -21,6 +22,7 @@ const modules = [
   { name: "Backups", href: "/backups", icon: DatabaseBackup },
   { name: "Security", href: "/security", icon: Shield },
   { name: "Prompts", href: "/prompts", icon: Terminal },
+  { name: "Updates", href: "/updates", icon: Package },
   { name: "Config", href: "/config", icon: Settings },
 ];
 
