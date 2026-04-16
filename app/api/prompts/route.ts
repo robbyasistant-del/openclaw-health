@@ -4,6 +4,7 @@ import path from "path";
 
 interface ExecutePromptRequest {
   promptName: string;
+  promptText?: string;  // Permitir enviar texto personalizado
   timeout?: number;
   variables?: Record<string, string>;
 }
@@ -14,7 +15,7 @@ interface PromptDefinition {
   prompt: string;
 }
 
-// Parsear prompts.md para extraer los prompts disponibles
+// Parsear prompts.md para extraer TODOS los prompts disponibles
 async function parsePromptsFile(): Promise<PromptDefinition[]> {
   const promptsPath = path.join(process.cwd(), "prompts.md");
   
@@ -22,22 +23,35 @@ async function parsePromptsFile(): Promise<PromptDefinition[]> {
     const content = await fs.readFile(promptsPath, "utf-8");
     const prompts: PromptDefinition[] = [];
     
-    // Regex para encontrar headers de prompts (## NAME o ## NAME_V1)
-    const promptBlocks = content.split(/\n##\s+/);
+    // Buscar bloques ## NOMBRE seguidos de **Feature:** y el prompt
+    const sections = content.split(/\n(?=##\s)/);
     
-    for (const block of promptBlocks) {
-      if (!block.trim()) continue;
+    for (const section of sections) {
+      const trimmed = section.trim();
+      if (!trimmed || trimmed.startsWith("# Openclaw")) continue;
       
-      const lines = block.split("\n");
-      const name = lines[0].trim();
+      // Extraer nombre (primera línea después de ##)
+      const nameMatch = trimmed.match(/^##\s+(.+)$/m);
+      if (!nameMatch) continue;
       
-      // Encontrar el contenido del prompt (entre ```text y ```)
-      const match = block.match(/```text\n([\s\S]*?)```/);
-      if (match) {
+      const name = nameMatch[1].trim();
+      
+      // Intentar encontrar el prompt en bloque ```text
+      const textBlockMatch = trimmed.match(/```text\n([\s\S]*?)```/);
+      if (textBlockMatch) {
         prompts.push({
           name,
-          prompt: match[1].trim()
+          prompt: textBlockMatch[1].trim()
         });
+      } else {
+        // Si no hay bloque ```text, buscar texto directo después de **Prompt:**
+        const promptMatch = trimmed.match(/\*\*Prompt:\*\*\s*\n?\n?```?\n?([\s\S]*?)(?:\n---|\n\*\*Usage:|\n##\s|$)/);
+        if (promptMatch) {
+          let promptText = promptMatch[1].trim();
+          // Limpiar posible ``` al final
+          promptText = promptText.replace(/```\s*$/, "").trim();
+          prompts.push({ name, prompt: promptText });
+        }
       }
     }
     
@@ -100,11 +114,29 @@ async function callOpenClawGateway(prompt: string, timeout: number): Promise<str
   }
 }
 
-// GET - Listar prompts disponibles
-export async function GET() {
+// GET - Listar prompts disponibles o devolver uno específico
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const name = searchParams.get("name");
+    
+    if (name) {
+      // Devolver prompt específico con su contenido
+      const prompt = await findPrompt(name);
+      if (!prompt) {
+        return NextResponse.json(
+          { error: `Prompt "${name}" not found` }, 
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ prompt });
+    }
+    
+    // Listar todos los prompts
     const prompts = await parsePromptsFile();
-    return NextResponse.json({ prompts: prompts.map(p => ({ name: p.name })) });
+    return NextResponse.json({ 
+      prompts: prompts.map(p => ({ name: p.name, prompt: p.prompt })) 
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
@@ -115,7 +147,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body: ExecutePromptRequest = await request.json();
-    const { promptName, timeout = 60, variables = {} } = body;
+    const { promptName, promptText, timeout = 300, variables = {} } = body;
     
     if (!promptName) {
       return NextResponse.json(
@@ -124,24 +156,31 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Buscar el prompt
-    const promptDef = await findPrompt(promptName);
-    if (!promptDef) {
-      return NextResponse.json(
-        { error: `Prompt "${promptName}" not found in prompts.md` }, 
-        { status: 404 }
-      );
+    let finalPromptText: string;
+    
+    // Si se proporciona texto personalizado, usar ese
+    if (promptText && promptText.trim()) {
+      finalPromptText = promptText;
+    } else {
+      // Buscar el prompt en prompts.md
+      const promptDef = await findPrompt(promptName);
+      if (!promptDef) {
+        return NextResponse.json(
+          { error: `Prompt "${promptName}" not found in prompts.md` }, 
+          { status: 404 }
+        );
+      }
+      finalPromptText = promptDef.prompt;
     }
     
     // Reemplazar variables si existen
-    let promptText = promptDef.prompt;
     for (const [key, value] of Object.entries(variables)) {
-      promptText = promptText.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+      finalPromptText = finalPromptText.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
     }
     
     // Llamar al gateway
     const startTime = Date.now();
-    const response = await callOpenClawGateway(promptText, timeout);
+    const response = await callOpenClawGateway(finalPromptText, timeout);
     const duration = Date.now() - startTime;
     
     return NextResponse.json({

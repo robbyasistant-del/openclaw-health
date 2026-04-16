@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Play, Loader2, Terminal, FileText } from "lucide-react";
+import { Play, Loader2, Terminal, FileText, Save } from "lucide-react";
 
 interface Prompt {
   name: string;
+  prompt: string;
 }
 
 export default function PromptsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<string>("");
   const [promptText, setPromptText] = useState<string>("");
-  const [timeout, setTimeout] = useState<number>(60);
+  const [timeout, setTimeout] = useState<number>(300);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -35,13 +36,14 @@ export default function PromptsPage() {
   useEffect(() => {
     if (!selectedPrompt) return;
     
-    fetch("/api/prompts")
+    fetch(`/api/prompts?name=${encodeURIComponent(selectedPrompt)}`)
       .then((res) => res.json())
       .then((data) => {
-        const found = data.prompts?.find((p: Prompt) => p.name === selectedPrompt);
-        // Nota: aquí solo mostramos el nombre, el prompt completo se mantiene en backend
-        setPromptText(found ? `Prompt: ${found.name}` : "");
-      });
+        if (data.prompt?.prompt) {
+          setPromptText(data.prompt.prompt);
+        }
+      })
+      .catch((err) => setError("Error cargando prompt: " + err.message));
   }, [selectedPrompt]);
 
   const handleExecute = async () => {
@@ -57,6 +59,7 @@ export default function PromptsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           promptName: selectedPrompt,
+          promptText: promptText,  // Enviamos el texto editable
           timeout: timeout,
         }),
       });
@@ -96,7 +99,7 @@ export default function PromptsPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-2">
-                Seleccionar Prompt
+                Seleccionar Prompt ({prompts.length} disponibles)
               </label>
               <select
                 value={selectedPrompt}
@@ -118,11 +121,12 @@ export default function PromptsPage() {
               <input
                 type="number"
                 min={10}
-                max={300}
+                max={600}
                 value={timeout}
                 onChange={(e) => setTimeout(Number(e.target.value))}
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
               />
+              <p className="text-xs text-zinc-500 mt-1">Por defecto: 300 segundos (5 minutos)</p>
             </div>
 
             <button
@@ -149,12 +153,12 @@ export default function PromptsPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Terminal className="h-5 w-5 text-emerald-500" />
-            Respuesta
+            Respuesta del Gateway
           </h2>
 
           <div className="relative">
             {loading && (
-              <div className="absolute inset-0 bg-zinc-900/80 flex items-center justify-center rounded-lg">
+              <div className="absolute inset-0 bg-zinc-900/80 flex items-center justify-center rounded-lg z-10">
                 <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
               </div>
             )}
@@ -162,7 +166,7 @@ export default function PromptsPage() {
             <textarea
               readOnly
               value={response}
-              placeholder={loading ? "Esperando respuesta del gateway..." : "La respuesta aparecerá aquí"}
+              placeholder={loading ? "Esperando respuesta del gateway..." : "La respuesta aparecerá aquí después de ejecutar"}
               className="w-full h-64 bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-zinc-300 font-mono text-sm resize-none focus:outline-none"
             />
           </div>
@@ -176,13 +180,36 @@ export default function PromptsPage() {
         </div>
       </div>
 
-      {/* Info del prompt seleccionado */}
-      {selectedPrompt && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-zinc-400 mb-2">Prompt seleccionado:</h3>
-          <p className="text-emerald-400 font-mono text-sm">{selectedPrompt}</p>
+      {/* Texto del Prompt - EDITABLE */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Save className="h-5 w-5 text-emerald-500" />
+            Texto del Prompt (Editable)
+          </h3>
+          <span className="text-xs text-zinc-500 bg-zinc-800 px-3 py-1 rounded-full">
+            Puedes editar antes de ejecutar
+          </span>
         </div>
-      )}
+        
+        <p className="text-sm text-zinc-400">
+          Selecciona un prompt del combobox arriba y edita el texto aquí. Al pulsar &quot;Ejecutar&quot;, se enviará 
+          <strong className="text-emerald-400"> exactamente este texto</strong> al gateway.
+        </p>
+
+        <textarea
+          value={promptText}
+          onChange={(e) => setPromptText(e.target.value)}
+          placeholder="Selecciona un prompt arriba para ver su contenido..."
+          className="w-full h-96 bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-zinc-300 font-mono text-sm resize-y focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          spellCheck={false}
+        />
+        
+        <div className="flex items-center justify-between text-xs text-zinc-500">
+          <span>{promptText.length} caracteres</span>
+          <span>Prompt: {selectedPrompt || "Ninguno seleccionado"}</span>
+        </div>
+      </div>
     </div>
   );
 }
